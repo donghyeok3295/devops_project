@@ -1,0 +1,1 @@
+# TODO: SQLAlchemy 모델 정의 (Oracle 19c, SEQUENCE + TRIGGER 전략)

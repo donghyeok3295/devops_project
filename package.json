@@ -1,0 +1,34 @@
+{
+  "name": "smart-lostfound",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*"
+  ],
+  "scripts": {
+    "dev:fe": "npm --workspace apps/frontend run dev",
+    "build:fe": "npm --workspace apps/frontend run build",
+    "lint:fe": "npm --workspace apps/frontend run lint",
+    "typecheck:fe": "npm --workspace apps/frontend run typecheck",
+    "codegen:fe": "openapi-typescript ./contracts/openapi.yaml -o ./apps/frontend/lib/api.types.ts",
+    "dc:up": "docker compose -f ./infra/docker-compose.yml up -d",
+    "dc:down": "docker compose -f ./infra/docker-compose.yml down",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.0.0",
+    "prettier": "^3.3.3",
+    "husky": "^9.1.0",
+    "lint-staged": "^15.2.10",
+    "@commitlint/cli": "^19.5.0",
+    "@commitlint/config-conventional": "^19.5.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+Write-Host '🔎 (Placeholder) Check contracts/openapi.yaml and FE types sync...'

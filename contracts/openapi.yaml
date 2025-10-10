@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info:
+  title: Smart Lost&Found API
+  version: 0.0.1
+paths:
+  /items:
+    get:
+      summary: List items
+      responses:
+        '200':
+          description: OK
+  /search:
+    post:
+      summary: Search (rule scoring → AI rerank)
+      responses:
+        '200':
+          description: OK

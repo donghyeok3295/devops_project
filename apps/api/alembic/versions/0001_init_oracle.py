@@ -1,1 +1,0 @@
-# TODO: 초기 마이그레이션 (SEQUENCE + TRIGGER)

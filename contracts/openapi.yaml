@@ -2,16 +2,289 @@ openapi: 3.0.3
 info:
   title: Smart Lost&Found API
   version: 0.0.1
+
+servers:
+  - url: http://localhost:8000
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ---------- Common wrapper ----------
+    ErrorDTO:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+
+    # 각 응답은 {data, error} 래퍼를 사용. 제네릭을 못 쓰므로 엔드포인트별 래퍼를 정의.
+    ApiResponseItemRead:
+      type: object
+      required: [data, error]
+      properties:
+        data:
+          $ref: '#/components/schemas/ItemRead'
+        error:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ErrorDTO' }]
+    ApiResponsePaginatedItems:
+      type: object
+      required: [data, error]
+      properties:
+        data:
+          $ref: '#/components/schemas/PaginatedItems'
+        error:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ErrorDTO' }]
+    ApiResponseSearchResponse:
+      type: object
+      required: [data, error]
+      properties:
+        data:
+          $ref: '#/components/schemas/SearchResponse'
+        error:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ErrorDTO' }]
+    ApiResponseError:
+      type: object
+      required: [data, error]
+      properties:
+        data:
+          nullable: true
+          default: null
+        error:
+          allOf: [{ $ref: '#/components/schemas/ErrorDTO' }]
+
+    # ---------- Items DTO ----------
+    PhotoDTO:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string, format: uri }
+        exif_lat: { type: number, format: float, nullable: true }
+        exif_lng: { type: number, format: float, nullable: true }
+
+    ItemCreate:
+      type: object
+      required: [title, photos]
+      properties:
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 2000, nullable: true }
+        category: { type: string, maxLength: 100, nullable: true }
+        brand: { type: string, maxLength: 100, nullable: true }
+        model: { type: string, maxLength: 100, nullable: true }
+        color: { type: string, maxLength: 50, nullable: true }
+        material: { type: string, maxLength: 100, nullable: true }
+        pattern: { type: string, maxLength: 100, nullable: true }
+        size_text: { type: string, maxLength: 100, nullable: true }
+        features: { type: string, maxLength: 400, nullable: true }
+        accessories: { type: string, maxLength: 200, nullable: true }
+        serial_masked: { type: string, maxLength: 100, nullable: true }
+        photos:
+          type: array
+          minItems: 2
+          items: { $ref: '#/components/schemas/PhotoDTO' }
+        stored_lat: { type: number, format: float, nullable: true }
+        stored_lng: { type: number, format: float, nullable: true }
+        stored_addr: { type: string, maxLength: 300, nullable: true }
+
+    ItemRead:
+      allOf:
+        - $ref: '#/components/schemas/ItemCreate'
+        - type: object
+          required: [id, status]
+          properties:
+            id: { type: integer, format: int32 }
+            status:
+              type: string
+              enum: [STORED, HANDED_OVER]
+            finder_user_id: { type: integer, format: int32, nullable: true }
+            created_at: { type: string, format: date-time, nullable: true }
+
+    PaginatedItems:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ItemRead' }
+        total: { type: integer, format: int32 }
+
+    # ---------- Search DTO ----------
+    SearchRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string }
+        category: { type: string, nullable: true }
+        brand: { type: string, nullable: true }
+        color: { type: string, nullable: true }
+        model: { type: string, nullable: true }
+        lat: { type: number, format: float, nullable: true }
+        lng: { type: number, format: float, nullable: true }
+        radius_km: { type: number, format: float, default: 20.0 }
+        since_hours: { type: integer, format: int32, default: 168 }
+        top_n: { type: integer, format: int32, default: 50 }
+
+    SearchCandidate:
+      type: object
+      required: [item, rule_score]
+      properties:
+        item: { $ref: '#/components/schemas/ItemRead' }
+        rule_score: { type: number, format: float }
+
+    RerankResult:
+      type: object
+      required: [item_id, llm_score, reason_text]
+      properties:
+        item_id: { type: integer, format: int32 }
+        llm_score: { type: number, format: float }
+        reason_text: { type: string }
+
+    SearchResponse:
+      type: object
+      required: [top_n, top_5, reasons]
+      properties:
+        top_n:
+          type: array
+          items: { $ref: '#/components/schemas/SearchCandidate' }
+        top_5:
+          type: array
+          items: { $ref: '#/components/schemas/ItemRead' }
+        reasons:
+          type: array
+          items: { $ref: '#/components/schemas/RerankResult' }
+
 paths:
   /items:
     get:
       summary: List items
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema: { type: string }
+          description: Search in title/description
+        - name: category
+          in: query
+          required: false
+          schema: { type: string }
+        - name: brand
+          in: query
+          required: false
+          schema: { type: string }
+        - name: color
+          in: query
+          required: false
+          schema: { type: string }
+        - name: finder
+          in: query
+          required: false
+          schema: { type: string, enum: [me] }
+          description: "'me'이면 본인 등록물만"
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: mask_coords
+          in: query
+          required: false
+          schema: { type: boolean, default: true }
+          description: 리스트/검색에서 좌표 반올림 노출(NFR2)
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponsePaginatedItems' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+    post:
+      summary: Create item
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseItemRead' }
+        '400':
+          description: Validation error (e.g., min 2 photos)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+        '403':
+          description: Forbidden (role not allowed)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ItemCreate' }
+
+  /items/{id}:
+    get:
+      summary: Get item by id
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseItemRead' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+
   /search:
     post:
       summary: Search (rule scoring → AI rerank)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SearchRequest' }
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseSearchResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }

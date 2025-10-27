@@ -1,0 +1,612 @@
+openapi: 3.0.0
+info:
+  title: Smart Lost & Found API
+  version: v1
+  description: 잃어버린 물건과 습득물을 스마트하게 매칭하고 인계하는 API 명세
+servers:
+  - url: /v1 # API Gateway 또는 기본 경로
+
+paths:
+  # --- 홈 배지용 ---
+  /notifications/unread_count:
+    get:
+      summary: Get unread notification count (public → unauth returns 0)
+      tags: [Notifications]
+      operationId: getUnreadNotificationCount
+      security: []  # 비로그인 허용
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseUnreadCount' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+
+  # --- 인증 ---
+  /auth/register:
+    post:
+      summary: Register with email and phone
+      tags: [Auth]
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthRegisterRequest' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              description: Resource pointer (e.g., /v1/me)
+              schema: { type: string, example: /v1/me }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseUserMe' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+        '409':
+          description: Duplicate email/phone
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+              examples:
+                duplicate:
+                  value: { data: null, error: { code: VALIDATION_SCHEMA, message: "Email or phone already exists." } }
+
+  /auth/login:
+    post:
+      summary: Login with email or phone
+      tags: [Auth]
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthLoginRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseAuthToken' }
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+              examples:
+                invalid:
+                  value: { data: null, error: { code: AUTH_UNAUTHORIZED, message: "Invalid email/phone or password." } }
+
+  /auth/logout:
+    post:
+      summary: Logout (invalidate token)
+      tags: [Auth]
+      operationId: logout
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: No Content
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+
+  # --- 설정/내 정보 ---
+  /me:
+    get:
+      summary: Get my account profile
+      tags: [Me]
+      operationId: getMe
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseUserMe' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+
+  # --- 내 목록 별도 엔드포인트 (페이지 편의) ---
+  /me/items:
+    get:
+      summary: List my items (same schema as /items but implicitly finder=me)
+      tags: [Items]
+      operationId: listMyItems
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [STORED, HANDED_OVER] }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponsePaginatedItems' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+
+  # --- 상세에서 클레임 생성 ---
+  /items/{id}/claims:
+    post:
+      summary: Create claim for an item
+      tags: [Claims]
+      operationId: createClaimForItem
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClaimCreateRequest' }
+      responses:
+        '201':
+          description: Created
+          headers:
+            Location:
+              description: Created claim URI
+              schema: { type: string, example: /v1/claims/987654321 }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseClaim' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+        '404':
+          description: Item not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+
+  # --- 클레임 목록/상세 ---
+  /claims:
+    get:
+      summary: List my claims
+      tags: [Claims]
+      operationId: listClaims
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema: { type: string, enum: [PENDING, APPROVED, REJECTED] }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponsePaginatedClaims' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+
+  /claims/{id}:
+    get:
+      summary: Get claim by id
+      tags: [Claims]
+      operationId: getClaimById
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseClaim' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+
+  # --- 알림 목록/읽음처리 ---
+  /notifications:
+    get:
+      summary: List my notifications
+      tags: [Notifications]
+      operationId: listNotifications
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseNotificationList' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+
+  /notifications/{id}/read:
+    post:
+      summary: Mark a notification as read
+      tags: [Notifications]
+      operationId: markNotificationRead
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '204':
+          description: No Content
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+
+  # --- 인계 처리 ---
+  /items/{id}/handover:
+    patch:
+      summary: State transition:STORED → CLAIMED → HANDED_OVER # 307번/308번 오류가 난 것으로 추정된 부분
+      tags: [Items]
+      operationId: handoverItem
+      security:
+        - bearerAuth: [] # 단축 문법 대신 풀어서 4칸씩 들여쓰기하여 안정성 확보
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HandoverActionRequest' }
+      responses:
+        '200':
+          description: OK (updated item)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseItemRead' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+        '403':
+          description: Forbidden role
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+        '409':
+          description: Invalid state transition
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseError' }
+              examples:
+                invalid:
+                  value: { data: null, error: { code: VALIDATION_SCHEMA, message: "Invalid state transition." } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT 토큰을 사용하여 인증 (Authorization:Bearer <token>)
+
+  schemas:
+    # ------------------------------------
+    # ★ 공통 DTO: 에러 및 응답 구조
+    # ------------------------------------
+    ErrorDTO:
+      type: object
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code: { type: string, example: AUTH_UNAUTHORIZED, description: "백엔드에서 정의된 고유 에러 코드" }
+        message: { type: string, example: "Invalid token or session expired." }
+
+    ApiResponseError:
+      type: object
+      required: [data, error]
+      additionalProperties: false
+      properties:
+        data: { nullable: true } # 에러 응답 시 data는 null
+        error: { $ref: '#/components/schemas/ErrorDTO' }
+    
+    # ------------------------------------
+    # ★ 아이템 관련 DTO (추가됨)
+    # ------------------------------------
+    ItemRead:
+      type: object
+      required: [id, title, status, finder_user_id, created_at]
+      additionalProperties: false
+      properties:
+        id: { type: integer, format: int64 }
+        title: { type: string, example: "아이폰 13 프로" }
+        description: { type: string, nullable: true }
+        status: { type: string, enum: [STORED, HANDED_OVER], example: STORED }
+        finder_user_id: { type: integer, format: int64, description: "습득한 사용자의 ID" }
+        created_at: { type: string, format: date-time }
+
+    PaginatedItems:
+      type: object
+      required: [items, total]
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ItemRead' }
+        total: { type: integer, format: int32 }
+
+    ApiResponseItemRead:
+      type: object
+      required: [data, error]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/ItemRead' }
+        error:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ErrorDTO' }]
+
+    ApiResponsePaginatedItems:
+      type: object
+      required: [data, error]
+      additionalProperties: false
+      properties:
+        data: { $ref: '#/components/schemas/PaginatedItems' }
+        error:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ErrorDTO' }]
+
+    # --- 홈/알림 ---
+    UnreadCount:
+      type: object
+      required: [unread_count]
+      additionalProperties: false
+      properties:
+        unread_count: { type: integer, minimum: 0 }
+
+    ApiResponseUnreadCount:
+      type: object
+      required: [data, error]
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/UnreadCount'
+        error:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ErrorDTO' }]
+
+    Notification:
+      type: object
+      required: [id, type, created_at, read]
+      additionalProperties: false
+      properties:
+        id: { type: integer, format: int64 }
+        type: { type: string, example: CLAIM_STATUS_CHANGED }
+        title: { type: string, nullable: true }
+        body: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }  # ISO8601 Z 권장
+        read: { type: boolean, default: false }
+
+    NotificationList:
+      type: object
+      required: [notifications, total]
+      additionalProperties: false
+      properties:
+        notifications:
+          type: array
+          items: { $ref: '#/components/schemas/Notification' }
+        total: { type: integer, format: int32 }
+
+    ApiResponseNotificationList:
+      type: object
+      required: [data, error]
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/NotificationList'
+        error:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ErrorDTO' }]
+
+    # --- 인증/계정 ---
+    AuthRegisterRequest:
+      type: object
+      required: [email, phone, password]
+      additionalProperties: false
+      properties:
+        email: { type: string, format: email, maxLength: 200 }
+        phone: { type: string, maxLength: 50 }
+        password: { type: string, minLength: 8, maxLength: 200 }
+
+    AuthLoginRequest:
+      type: object
+      required: [identifier, password]
+      additionalProperties: false
+      properties:
+        identifier: { type: string, description: email or phone }
+        password: { type: string }
+
+    AuthToken:
+      type: object
+      required: [access_token, token_type, expires_at]
+      additionalProperties: false
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_at: { type: string, format: date-time }
+
+    ApiResponseAuthToken:
+      type: object
+      required: [data, error]
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/AuthToken'
+        error:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ErrorDTO' }]
+
+    UserMe:
+      type: object
+      required: [user_id, email, phone, role, created_at]
+      additionalProperties: false
+      properties:
+        user_id: { type: integer, format: int64 }
+        email: { type: string, format: email }
+        phone: { type: string }
+        role: { type: string, enum: [SEEKER, FINDER] }
+        created_at: { type: string, format: date-time }
+
+    ApiResponseUserMe:
+      type: object
+      required: [data, error]
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/UserMe'
+        error:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ErrorDTO' }]
+
+    # --- 클레임 ---
+    ClaimCreateRequest:
+      type: object
+      required: [message]
+      additionalProperties: false
+      properties:
+        message: { type: string, maxLength: 1000 }
+
+    Claim:
+      type: object
+      required: [id, item_id, seeker_user_id, status, created_at, message]
+      additionalProperties: false
+      properties:
+        id: { type: integer, format: int64 }
+        item_id: { type: integer, format: int64 }
+        seeker_user_id: { type: integer, format: int64 }
+        status: { type: string, enum: [PENDING, APPROVED, REJECTED], example: PENDING }
+        message: { type: string }
+        created_at: { type: string, format: date-time }
+
+    ClaimSummary:
+      allOf:
+        - $ref: '#/components/schemas/Claim'
+        - type: object
+          required: [updated_at]
+          properties:
+            updated_at: { type: string, format: date-time }
+
+    PaginatedClaims:
+      type: object
+      required: [claims, total]
+      additionalProperties: false
+      properties:
+        claims:
+          type: array
+          items: { $ref: '#/components/schemas/ClaimSummary' }
+        total: { type: integer, format: int32 }
+
+    ApiResponseClaim:
+      type: object
+      required: [data, error]
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Claim'
+        error:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ErrorDTO' }]
+
+    ApiResponsePaginatedClaims:
+      type: object
+      required: [data, error]
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/PaginatedClaims'
+        error:
+          nullable: true
+          allOf: [{ $ref: '#/components/schemas/ErrorDTO' }]
+
+    # --- 인계 처리 ---
+    HandoverActionRequest:
+      type: object
+      required: [action]
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+          enum: [CLAIM, HANDOVER]
+          description: |
+            CLAIM: STORED → CLAIMED (클레임 접수 처리)
+            HANDOVER: CLAIMED → HANDED_OVER (최종 인계 완료)

@@ -1,0 +1,70 @@
+# =========================
+# 📦 Node / Next.js
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+package-lock.json
+*.tsbuildinfo
+
+# Next.js build output
+.next/
+out/
+*.next/
+.next-cache/
+
+# =========================
+# 🐍 Python / FastAPI
+# =========================
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# =========================
+# ⚙️ Environment
+# =========================
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# =========================
+# 🐳 Docker / DB Volumes
+# =========================
+docker-data/
+oracle-data/
+
+# =========================
+# 🧪 Coverage / Test / Caches
+# =========================
+coverage/
+htmlcov/
+pytest_cache/
+.mypy_cache/
+.cache/
+
+# =========================
+# 💻 IDE / System files
+# =========================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# =========================
+# 🧱 Build / Dist
+# =========================
+dist/
+build/
+*.log
+
+# =========================
+# 🧩 Contracts / Generated (예비)
+# =========================
+apps/frontend/.openapi-types/
+apps/frontend/.next-types/

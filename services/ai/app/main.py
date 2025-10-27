@@ -1,8 +1,16 @@
+from dotenv import load_dotenv
+load_dotenv()
+
+
 from fastapi import FastAPI
+from app.routers import rerank, health
 
-app = FastAPI(title='Smart Lost&Found AI')
 
-@app.post('/rerank')
-def rerank():
-    # TODO: 규칙 점수 기반 후보 N개 + LLM rerank 반환
-    return {'items': []}
+app = FastAPI(title="AI Matcher /rerank API")
+
+app.include_router(rerank.router)
+app.include_router(health.router)
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}

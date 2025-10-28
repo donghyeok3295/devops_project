@@ -4,3 +4,5 @@ pydantic
 SQLAlchemy
 cx_Oracle; platform_system == 'Windows' or platform_system == 'Linux' or platform_system == 'Darwin'
 python-dotenv
+email-validator
+python-multipart

@@ -131,7 +131,7 @@ class ItemPhoto(Base):
 
     id: Mapped[int] = mapped_column(Identity(start=1, always=True), primary_key=True)
     item_id: Mapped[int] = mapped_column(ForeignKey("ITEMS.id"), nullable=False)
-    url: Mapped[str] = mapped_column(String(255), nullable=False)
+    url: Mapped[str] = mapped_column(Text, nullable=False)
     exif_json: Mapped[str | None] = mapped_column(Text)   # EXIF 파싱 결과(JSON 문자열)
     phash: Mapped[str | None] = mapped_column(String(64)) # (선택) 중복 판별용 해시
 

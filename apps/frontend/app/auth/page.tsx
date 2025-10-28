@@ -19,7 +19,6 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>("SEEKER");
 
   useEffect(() => {
     setMsg(null);
@@ -48,7 +47,7 @@ export default function AuthPage() {
     setMsg(null);
     try {
       // ✅ 함수 호출로 변경
-      await register({ email, phone, password, role });
+      await register({ email, phone, password, role: "FINDER" });
       setMsg("🎉 회원가입 완료! 이제 로그인해주세요.");
       setTab("login");
     } catch (e: any) {
@@ -182,25 +181,6 @@ export default function AuthPage() {
               required
               autoComplete="new-password"
             />
-
-            <div className="auth-role">
-              <button
-                type="button"
-                onClick={() => setRole("SEEKER")}
-                className={role === "SEEKER" ? "is-active" : undefined}
-                aria-pressed={role === "SEEKER"}
-              >
-                분실자(찾기)
-              </button>
-              <button
-                type="button"
-                onClick={() => setRole("FINDER")}
-                className={role === "FINDER" ? "is-active" : undefined}
-                aria-pressed={role === "FINDER"}
-              >
-                습득자(등록)
-              </button>
-            </div>
 
             {msg && (
               <p style={{ textAlign: "center", fontSize: 12, color: "#475569" }}>{msg}</p>

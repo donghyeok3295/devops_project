@@ -3,13 +3,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Home, PlusCircle, Bell, User, Search } from 'lucide-react';
 
 type ItemStatus = 'STORED' | 'CLAIMED' | 'HANDED_OVER';
 interface ItemSummary {
   id: number;
+  name?: string;
   status: ItemStatus;
   created_at: string;
   thumb_url?: string | null;
+  photos?: Array<{ url: string }>;
   attributes: {
     category: string;
     brand?: string | null;
@@ -31,7 +34,7 @@ export default function MyItemsPage() {
   const [items, setItems] = useState<ItemSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
-  const [status, setStatus] = useState<'ALL' | ItemStatus>('ALL');
+  const [status, setStatus] = useState<'ALL' | 'STORED' | 'HANDED_OVER'>('ALL');
   const [pagination, setPagination] = useState<Pagination | null>(null);
 
   // ✅ 토큰 키 통일: lf_token 사용
@@ -136,11 +139,11 @@ export default function MyItemsPage() {
       </section>
 
       {/* Body */}
-      <div className="lf-container lf-me-body">
+      <div className="lf-container lf-me-body" style={{ marginTop: '-30px', paddingTop: '20px' }}>
         {/* 필터 + 새로 등록 */}
         <div className="lf-card lf-me-filters" role="group" aria-label="상태 필터">
           <div className="lf-filter-pills">
-            {(['ALL', 'STORED', 'CLAIMED', 'HANDED_OVER'] as const).map((s) => (
+            {(['ALL', 'STORED', 'HANDED_OVER'] as const).map((s) => (
               <button
                 key={s}
                 type="button"
@@ -151,14 +154,10 @@ export default function MyItemsPage() {
               >
                 {s === 'ALL' && '전체'}
                 {s === 'STORED' && '보관 중'}
-                {s === 'CLAIMED' && '클레임 중'}
                 {s === 'HANDED_OVER' && '반환 완료'}
               </button>
             ))}
           </div>
-          <Link href="/items/new" className="lf-btn-primary" aria-label="새 분실물 등록">
-            + 새로 등록
-          </Link>
         </div>
 
         {/* 컨텐츠 상태별 렌더 */}
@@ -186,28 +185,31 @@ export default function MyItemsPage() {
           </div>
         ) : (
           <>
-            <ul className="lf-item-grid">
+            <div className="lf-item-grid">
               {items.map((item) => (
                 <li key={item.id} className="lf-item-card">
                   <Link href={`/items/${item.id}`} className="lf-item-thumb" aria-label="상세 보기">
-                    {item.thumb_url ? (
-                      <img src={item.thumb_url} alt={item.attributes.category || '분실물'} />
-                    ) : (
-                      <div className="lf-thumb-empty" aria-hidden>
-                        No Image
+                    {item.photos && item.photos.length > 0 ? (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px', width: '100%', height: '100%' }}>
+                        {item.photos.slice(0, 2).map((photo, i) => (
+                          <img key={i} src={photo.url} alt={`${item.name || item.attributes.category} 사진 ${i + 1}`} />
+                        ))}
                       </div>
+                    ) : item.thumb_url ? (
+                      <img src={item.thumb_url} alt={item.name || item.attributes.category || '분실물'} />
+                    ) : (
+                      <div className="lf-thumb-empty" aria-hidden>No Image</div>
                     )}
                   </Link>
 
                   <div className="lf-item-body">
                     <div className="lf-item-title">
-                      <Link href={`/items/${item.id}`}>{item.attributes.category}</Link>
+                      <Link href={`/items/${item.id}`}>{item.name || item.attributes.category}</Link>
                     </div>
 
                     <div className="lf-item-meta">
                       <span className={`lf-badge-chip status-${item.status.toLowerCase()}`}>
                         {item.status === 'STORED' && '보관 중'}
-                        {item.status === 'CLAIMED' && '클레임 중'}
                         {item.status === 'HANDED_OVER' && '반환 완료'}
                       </span>
                       <span className="lf-meta-dot" />
@@ -217,18 +219,16 @@ export default function MyItemsPage() {
                       </span>
                     </div>
 
-                    <div className="lf-card-actions">
-                      <Link href={`/items/${item.id}`} className="lf-btn-ghost" aria-label="상세 보기">
-                        상세 보기
-                      </Link>
-                      <Link href={`/items/${item.id}?edit=1`} className="lf-btn-ghost" aria-label="수정하기">
-                        수정
+                    <div className="lf-card-actions" style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                      <Link href={`/items/${item.id}`} className="lf-btn-ghost" style={{ fontSize: '12px', padding: '4px 8px' }}>
+                        상세보기
                       </Link>
                       <button
                         type="button"
                         className="lf-btn-danger"
                         onClick={() => onDelete(item.id)}
                         aria-label="삭제하기"
+                        style={{ fontSize: '12px', padding: '4px 8px' }}
                       >
                         삭제
                       </button>
@@ -236,7 +236,7 @@ export default function MyItemsPage() {
                   </div>
                 </li>
               ))}
-            </ul>
+            </div>
 
             {pagination && pagination.total > pagination.size && (
               <nav className="lf-pagination" aria-label="페이지네이션">
@@ -257,13 +257,28 @@ export default function MyItemsPage() {
       </div>
 
       {/* 하단 TabBar */}
-      <nav className="lf-tabbar" aria-label="하단 탭">
+      <nav className="lf-tabbar" aria-label="하단 탭바">
         <div className="lf-tabbar-inner">
-          <Link href="/" className="lf-tab">🏠<span>홈</span></Link>
-          <Link href="/items/new" className="lf-tab">➕<span>등록</span></Link>
-          <Link href="/me/activity" className="lf-tab">📋<span>내 활동</span></Link>
-          <Link href="/me/items" className="lf-tab lf-tab-active">👤<span>내 정보</span></Link>
-          <Link href="/search" className="lf-tab">🔎<span>검색</span></Link>
+          <Link href="/" className="lf-tab" aria-label="홈">
+            <Home size={18} />
+            <span>홈</span>
+          </Link>
+          <Link href="/items/new" className="lf-tab" aria-label="등록">
+            <PlusCircle size={18} />
+            <span>등록</span>
+          </Link>
+          <Link href="/me/activity" className="lf-tab" aria-label="내 활동">
+            <Bell size={18} />
+            <span>내 활동</span>
+          </Link>
+          <Link href="/me/profile" className="lf-tab lf-tab-active" aria-label="내 정보">
+            <User size={18} />
+            <span>내 정보</span>
+          </Link>
+          <Link href="/search" className="lf-tab" aria-label="검색">
+            <Search size={18} />
+            <span>검색</span>
+          </Link>
         </div>
       </nav>
     </main>

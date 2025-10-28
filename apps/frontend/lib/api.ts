@@ -9,7 +9,7 @@ function getAuthToken(): string | null {
 // api.ts에 추가
 export type Role = "SEEKER" | "FINDER";
 
-export async function register(body: { email: string; phone: string; password: string; role: Role }) {
+export async function register(body: { email: string; phone: string; password: string; role?: string }) {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -19,6 +19,25 @@ export async function register(body: { email: string; phone: string; password: s
   return res.json() as Promise<{ ok: true }>;
 }
 
+/** 내 통계 조회 */
+export async function getMyStats() {
+  return api<any>('/me/stats');
+}
+
+/** 내 활동 목록 조회 */
+export async function getMyActivities(limit = 100) {
+  return api<any[]>(`/me/activities?limit=${limit}`);
+}
+
+/** 내 등록 목록 조회 */
+export async function getMyItems() {
+  return api<any>('/me/items');
+}
+
+/** 내 프로필 조회 */
+export async function getMyProfile() {
+  return api<any>('/me/profile');
+}
 
 
 /** 기본 fetch wrapper */

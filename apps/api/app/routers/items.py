@@ -201,3 +201,45 @@ def update_status(
     db.commit()
     return {"id": item.id, "status": item.status}
 
+# DELETE 엔드포인트
+@router.delete("/{item_id}")
+def delete_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    """분실물 삭제 (사진도 함께 삭제)"""
+    item = db.get(Item, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if item.finder_id != int(user_id):
+        raise HTTPException(status_code=403, detail="Not your item")
+    
+    # 사진 삭제는 cascade로 자동 삭제됨
+    db.delete(item)
+    db.commit()
+    return {"ok": True}
+
+# PATCH 엔드포인트 (전체 업데이트)
+@router.patch("/{item_id}")
+def patch_item(
+    item_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    """분실물 상태 변경 (전체 업데이트)"""
+    item = db.get(Item, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if item.finder_id != int(user_id):
+        raise HTTPException(status_code=403, detail="Not your item")
+    
+    # status 필드만 업데이트
+    if "status" in payload:
+        item.status = ItemStatus(payload["status"])
+        db.commit()
+        return {"id": item.id, "status": item.status}
+    
+    return {"id": item.id}
+

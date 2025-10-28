@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Bell, CheckCircle2, Clock3, AlertTriangle, Home, PlusCircle, User, Search } from 'lucide-react';
+import { getMyStats, getMyActivities } from '@/lib/api';
 
 /**
  * Smart Lost&Found — 내 활동(/me/activity) — UI Only
@@ -12,7 +13,7 @@ import { Bell, CheckCircle2, Clock3, AlertTriangle, Home, PlusCircle, User, Sear
  * - 로딩/빈/오류 상태 가짜 시뮬레이터 포함
  */
 
-type ActivityType = 'ALL' | 'FOUND' | 'CLAIM';
+type ActivityType = 'ALL' | 'REGISTERED' | 'RETURNED';
 type Badge = 'DONE' | 'ONGOING' | 'REJECTED';
 
 interface ActivityItem {
@@ -27,10 +28,8 @@ interface ActivityItem {
 
 // ---- 가짜 데이터 (UI 전용) ----
 const MOCK_ACTIVITIES: ActivityItem[] = [
-  { id: 'a1', type: 'FOUND', title: '새 분실물 등록', desc: '지갑(브라운) — 보관 중', ago: '2시간 전', badge: 'ONGOING', icon: 'CLOCK' },
-  { id: 'a2', type: 'CLAIM', title: '클레임 접수', desc: '아이폰 12 Pro 일치 검토', ago: '4시간 전', badge: 'ONGOING', icon: 'BELL' },
-  { id: 'a3', type: 'FOUND', title: '반환 완료 처리', desc: '무선 이어폰 세트', ago: '어제', badge: 'DONE', icon: 'CHECK' },
-  { id: 'a4', type: 'CLAIM', title: '클레임 거부', desc: '시리얼 불일치', ago: '2일 전', badge: 'REJECTED', icon: 'WARN' },
+  { id: 'a1', type: 'REGISTERED', title: '새 분실물 등록', desc: '지갑(브라운) — 보관 중', ago: '2시간 전', badge: 'ONGOING', icon: 'CLOCK' },
+  { id: 'a3', type: 'RETURNED', title: '반환 완료 처리', desc: '무선 이어폰 세트', ago: '어제', badge: 'DONE', icon: 'CHECK' },
 ];
 
 // ---- 배지 렌더 ----
@@ -70,55 +69,87 @@ export default function ActivityPage() {
   const [tab, setTab] = useState<ActivityType>('ALL');
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState<string | null>(null);
+  const [statsData, setStatsData] = useState<any>(null);
+  const [activitiesData, setActivitiesData] = useState<ActivityItem[]>([]);
 
-  // UI 데모용 로딩 시뮬레이션
+  // API 연결
   useEffect(() => {
-    const t = setTimeout(() => {
-      // error를 보고 싶으면 아래 주석 해제
-      // setError('활동을 불러오지 못했습니다.');
-      setLoading(false);
-    }, 650);
-    return () => clearTimeout(t);
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        const [stats, activities] = await Promise.all([
+          getMyStats().catch(() => null),
+          getMyActivities().catch(() => []),
+        ]);
+        if (!mounted) return;
+        setStatsData(stats);
+        setActivitiesData(activities || []);
+      } catch (e) {
+        if (!mounted) return;
+        setError(e instanceof Error ? e.message : '활동을 불러오지 못했습니다.');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
   }, []);
 
   const stats = useMemo(() => {
-    // 간단 합산(실제 연결 시 API 응답 사용)
-    const total = MOCK_ACTIVITIES.length;
-    const done = MOCK_ACTIVITIES.filter(a => a.badge === 'DONE').length;
-    const ongoing = MOCK_ACTIVITIES.filter(a => a.badge === 'ONGOING').length;
-    const claimed = MOCK_ACTIVITIES.filter(a => a.type === 'CLAIM').length;
-    return { total, done, ongoing, claimed };
-  }, []);
+    if (statsData) {
+      return {
+        total: statsData.total || 0,
+        done: statsData.handed_over || 0,
+        ongoing: statsData.stored || 0,
+        claimed: 0,
+      };
+    }
+    return { total: MOCK_ACTIVITIES.length, done: 0, ongoing: 0, claimed: 0 };
+  }, [statsData]);
 
   const filtered = useMemo(() => {
-    if (tab === 'ALL') return MOCK_ACTIVITIES;
-    return MOCK_ACTIVITIES.filter(a => a.type === tab);
-  }, [tab]);
+    const data = activitiesData.length > 0 ? activitiesData : [];
+    if (tab === 'ALL') return data;
+    
+    // 필터링: REGISTERED (STORED 상태) 또는 RETURNED (HANDED_OVER 상태)
+    if (tab === 'REGISTERED') {
+      return data.filter((a: any) => a.badge === 'ONGOING' || a.status === 'STORED');
+    }
+    if (tab === 'RETURNED') {
+      return data.filter((a: any) => a.badge === 'DONE' || a.status === 'HANDED_OVER');
+    }
+    
+    return data.filter(a => a.type === tab);
+  }, [tab, activitiesData]);
 
   return (
     <main className="lf-page lf-activity">
-      {/* 헤더(간단) */}
-      <header className="lf-container" style={{ paddingTop: 20, paddingBottom: 4 }}>
-        <h1 className="lf-section-title" aria-label="내 활동 페이지 제목">내 활동</h1>
-      </header>
+      {/* Hero */}
+      <section className="lf-hero">
+        <div className="lf-container">
+          <p className="lf-hero-sub">내 정보 &gt; 활동</p>
+          <h1 className="lf-hero-title">내 활동</h1>
+          <p className="lf-hero-desc">등록한 분실물의 활동 기록을 확인하세요</p>
+        </div>
+      </section>
 
       {/* 통계 4칸 */}
-      <section className="lf-container" aria-label="활동 통계">
+      <section className="lf-container" aria-label="활동 통계" style={{ marginTop: '-20px', paddingTop: '20px' }}>
         <div className="lf-grid-4">
           <div className="lf-stat" role="status" aria-label={`전체 ${stats.total}건`}>
             <div className="lf-stat-value">{loading ? '—' : stats.total}</div>
             <div className="lf-stat-label">전체</div>
           </div>
-          <div className="lf-stat" role="status" aria-label={`완료 ${stats.done}건`}>
-            <div className="lf-stat-value">{loading ? '—' : stats.done}</div>
-            <div className="lf-stat-label">완료</div>
-          </div>
-          <div className="lf-stat" role="status" aria-label={`진행중 ${stats.ongoing}건`}>
+          <div className="lf-stat" role="status" aria-label={`등록 ${stats.ongoing}건`}>
             <div className="lf-stat-value">{loading ? '—' : stats.ongoing}</div>
-            <div className="lf-stat-label">진행중</div>
+            <div className="lf-stat-label">등록</div>
+          </div>
+          <div className="lf-stat" role="status" aria-label={`반환 ${stats.done}건`}>
+            <div className="lf-stat-value">{loading ? '—' : stats.done}</div>
+            <div className="lf-stat-label">반환</div>
           </div>
           <div className="lf-stat" role="status" aria-label={`클레임 ${stats.claimed}건`}>
-            <div className="lf-stat-value">{loading ? '—' : stats.claimed}</div>
+            <div className="lf-stat-value">{loading ? '—' : 0}</div>
             <div className="lf-stat-label">클레임</div>
           </div>
         </div>
@@ -134,15 +165,15 @@ export default function ActivityPage() {
 
           <div className="lf-list-head">
     <nav className="lf-activity-tabs" aria-label="활동 유형 탭">
-      {(['ALL', 'FOUND', 'CLAIM'] as ActivityType[]).map(k => (
+      {(['ALL', 'REGISTERED', 'RETURNED'] as ActivityType[]).map(k => (
         <button
           key={k}
           className={'lf-activity-tab' + (tab === k ? ' is-active' : '')}
           onClick={() => setTab(k)}
           aria-pressed={tab === k}
-          aria-label={k === 'ALL' ? '전체' : k === 'FOUND' ? '등록' : '클레임'}
+          aria-label={k === 'ALL' ? '전체' : k === 'REGISTERED' ? '등록' : '반환'}
         >
-          {k === 'ALL' ? '전체' : k === 'FOUND' ? '등록' : '클레임'}
+          {k === 'ALL' ? '전체' : k === 'REGISTERED' ? '등록' : '반환'}
         </button>
       ))}
     </nav>
@@ -193,7 +224,12 @@ export default function ActivityPage() {
               <li key={a.id} className="lf-activity-item">
                 <RoundIcon kind={a.icon} />
                 <div className="lf-activity-main">
-                  <div className="lf-activity-title">{a.title}</div>
+                  {/* desc에서 분실물 이름 추출 및 상태에 따른 표시 */}
+                  <div className="lf-activity-title">
+                    {a.badge === 'ONGOING' ? `${a.desc ? a.desc.split(' — ')[0] : '분실물'} 등록` : 
+                     a.badge === 'DONE' ? `${a.desc ? a.desc.split(' — ')[0] : '분실물'} 반환 완료` : 
+                     a.title}
+                  </div>
                   {a.desc && <div className="lf-activity-desc">{a.desc}</div>}
                   <div className="lf-activity-time" aria-label={`발생 시각 ${a.ago}`}>{a.ago}</div>
                 </div>

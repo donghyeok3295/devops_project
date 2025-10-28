@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { getMyStats, getMyActivities } from '@/lib/api'
 
 import Link from 'next/link'
 import {
@@ -11,10 +12,12 @@ import {
   User,
   PackageSearch,
   ListChecks,
+  Home,
+  Bell,
 } from 'lucide-react'
 
 // --- 환경변수 ---
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://127.0.0.1:8000'
 
 // --- 타입 ---
 interface Stats {
@@ -134,55 +137,140 @@ export default function HomePage() {
   useEffect(() => {
     let mounted = true
     ;(async () => {
-      const unread = await getJSON<{ count: number }>(`/notifications/unread_count`)
-      if (mounted) setUnreadCount(unread?.count ?? 0)
+      try {
+        // 알림 기능 제거됨 - unread count를 0으로 설정
+        if (mounted) setUnreadCount(0)
 
-      const statsA = await getJSON<any>(`/items/stats`)
-      let nextStats: Stats | null = null
-      if (statsA && typeof statsA === 'object') {
-        nextStats = {
-          total: Number(statsA.total ?? statsA.items_total ?? 0),
-          stored: Number(statsA.stored ?? statsA.items_stored ?? 0),
-          handed_over: Number(statsA.handed_over ?? statsA.returned ?? 0),
-          online: Number(statsA.online ?? statsA.users_online ?? 0),
-        }
-      } else {
-        const statsB = await getJSON<any>(`/stats/overview`)
-        if (statsB) {
-          nextStats = {
-            total: Number(statsB.total ?? 0),
-            stored: Number(statsB.stored ?? 0),
-            handed_over: Number(statsB.handed_over ?? statsB.returned ?? 0),
-            online: Number(statsB.online ?? 0),
+        // 로그인한 경우에는 개인 통계, 아닌 경우 전체 통계
+        const token = localStorage.getItem('lf_token')
+        
+        let nextStats: Stats | null = null
+        if (token) {
+          // 로그인한 경우: 내 통계 가져오기
+          try {
+            console.log('Fetching my stats from:', `${API_BASE}/me/stats`)
+            const token_header = localStorage.getItem('lf_token')
+            const myStatsRes = await fetch(`${API_BASE}/me/stats`, {
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token_header}`,
+              },
+              credentials: 'include',
+              cache: 'no-store',
+            })
+            console.log('My stats response status:', myStatsRes.status)
+            if (!myStatsRes.ok) {
+              const errorText = await myStatsRes.text()
+              console.error('My stats error:', errorText)
+            } else {
+              const myStats = await myStatsRes.json()
+              console.log('My stats data:', myStats)
+              nextStats = {
+                total: myStats.total || 0,
+                stored: myStats.stored || 0,
+                handed_over: myStats.handed_over || 0,
+                online: myStats.online || 0,
+              }
+            }
+          } catch (e) {
+            console.error('Failed to fetch my stats:', e)
           }
         }
-      }
-      if (mounted) setStats(nextStats ?? { total: 1247, stored: 89, handed_over: 456, online: 234 })
-
-      const acts = await getJSON<any[]>(`/activities`)
-      if (mounted) {
-        if (Array.isArray(acts) && acts.length) {
-          setActivities(
-            acts.slice(0, 5).map((a: any, i: number) => ({
-              id: a.id ?? i,
-              icon: a.type === 'MATCHED' ? 'match' : a.type === 'CREATED' ? 'new' : 'search',
-              title:
-                a.message ||
-                (a.type === 'MATCHED'
-                  ? '아이폰 12 Pro 매칭 성공'
-                  : a.type === 'CREATED'
-                  ? '새로운 분실물 등록'
-                  : '검색 요청 접수'),
-              timeAgo: a.time_ago || a.created_at || '방금 전',
-            })),
-          )
-        } else {
-          setActivities([
-            { id: 1, icon: 'match', title: '아이폰 12 Pro 매칭 성공', timeAgo: '2시간 전' },
-            { id: 2, icon: 'new', title: '새로운 분실물 등록', timeAgo: '4시간 전' },
-            { id: 3, icon: 'search', title: '검색 요청 접수', timeAgo: '6시간 전' },
-          ])
+        
+        // 로그인 안 했거나 내 통계 못 가져온 경우 전체 통계 사용
+        if (!nextStats) {
+          const statsA = await getJSON<any>(`/items/stats`).catch(() => null)
+          if (statsA && typeof statsA === 'object') {
+            nextStats = {
+              total: Number(statsA.total ?? statsA.items_total ?? 0),
+              stored: Number(statsA.stored ?? statsA.items_stored ?? 0),
+              handed_over: Number(statsA.handed ?? statsA.handed_over ?? statsA.returned ?? 0),
+              online: Number(statsA.online ?? statsA.users_online ?? 0),
+            }
+          } else {
+            const statsB = await getJSON<any>(`/stats/overview`).catch(() => null)
+            if (statsB) {
+              nextStats = {
+                total: Number(statsB.total ?? 0),
+                stored: Number(statsB.stored ?? 0),
+                handed_over: Number(statsB.handed_over ?? statsB.returned ?? 0),
+                online: Number(statsB.online ?? 0),
+              }
+            }
+          }
         }
+        
+        console.log('Main page stats:', nextStats);
+        if (mounted) setStats(nextStats ?? { total: 0, stored: 0, handed_over: 0, online: 0 })
+
+        // 활동 가져오기 (로그인한 경우에만)
+        if (token) {
+          try {
+            const token_header = localStorage.getItem('lf_token')
+            const actsRes = await fetch(`${API_BASE}/me/activities?limit=10`, {
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token_header}`,
+              },
+              credentials: 'include',
+              cache: 'no-store',
+            })
+            
+            console.log('My activities response status:', actsRes.status)
+            
+            if (actsRes.ok) {
+              const acts = await actsRes.json()
+              console.log('Main page activities:', acts)
+              
+              if (mounted && acts.length > 0) {
+                // 백엔드 응답을 프론트엔드 형식으로 변환
+                const mappedActs = acts.map((a: any) => ({
+                  id: a.id || String(Math.random()),
+                  icon: a.icon === 'CLOCK' ? 'new' : a.icon === 'CHECK' ? 'match' : 'search',
+                  title: a.title || a.desc || '활동',
+                  timeAgo: a.ago || a.timeAgo || '방금 전',
+                }))
+                setActivities(mappedActs.slice(0, 3))
+              } else if (mounted) {
+                // 데이터가 없으면 폴백
+                setActivities([
+                  { id: '1', icon: 'new', title: '샘플 분실물 등록', timeAgo: '2시간 전' },
+                  { id: '2', icon: 'match', title: '샘플 분실물 반환', timeAgo: '4시간 전' },
+                  { id: '3', icon: 'new', title: '샘플 분실물 등록', timeAgo: '6시간 전' },
+                ])
+              }
+            } else {
+              console.error('Activities fetch failed:', await actsRes.text())
+              if (mounted) {
+                setActivities([
+                  { id: '1', icon: 'new', title: '샘플 분실물 등록', timeAgo: '2시간 전' },
+                  { id: '2', icon: 'match', title: '샘플 분실물 반환', timeAgo: '4시간 전' },
+                  { id: '3', icon: 'new', title: '샘플 분실물 등록', timeAgo: '6시간 전' },
+                ])
+              }
+            }
+          } catch (e) {
+            console.error('Failed to fetch activities:', e)
+            if (mounted) {
+              setActivities([
+                { id: '1', icon: 'new', title: '샘플 분실물 등록', timeAgo: '2시간 전' },
+                { id: '2', icon: 'match', title: '샘플 분실물 반환', timeAgo: '4시간 전' },
+                { id: '3', icon: 'new', title: '샘플 분실물 등록', timeAgo: '6시간 전' },
+              ])
+            }
+          }
+        } else {
+          // 로그인 안 했으면 폴백 데이터
+          if (mounted) {
+            setActivities([
+              { id: '1', icon: 'new', title: '샘플 분실물 등록', timeAgo: '2시간 전' },
+              { id: '2', icon: 'match', title: '샘플 분실물 반환', timeAgo: '4시간 전' },
+              { id: '3', icon: 'new', title: '샘플 분실물 등록', timeAgo: '6시간 전' },
+            ])
+          }
+        }
+      } catch (e) {
+        console.error('Main page data fetch error:', e)
       }
     })()
     return () => {
@@ -221,7 +309,7 @@ export default function HomePage() {
       </section>
 
       {/* ====== BODY ====== */}
-      <main className="lf-container -mt-16 space-y-8">
+      <main className="lf-container space-y-8" style={{ marginTop: '-60px' }}>
         {/* 빠른 작업 2카드 */}
         <section aria-labelledby="quick-actions">
           <h2 id="quick-actions" className="sr-only">빠른 작업</h2>
@@ -283,11 +371,26 @@ export default function HomePage() {
       {/* 하단 탭바 */}
       <nav className="lf-tabbar" aria-label="하단 탭바">
         <div className="lf-tabbar-inner">
-          <Tab href="/" label="홈" Icon={LayoutDashboard} active />
-          <Tab href="/items/new" label="분실물 등록" Icon={PlusCircle} />
-          <Tab href="/me/activity" label="내 활동" Icon={ListChecks} badge={unreadCount} />
-          <Tab href="/me/profile" label="내 정보" Icon={User} />
-          <Tab href="/search" label="검색" Icon={Search} />
+          <Link href="/" className="lf-tab lf-tab-active" aria-label="홈">
+            <Home size={18} />
+            <span>홈</span>
+          </Link>
+          <Link href="/items/new" className="lf-tab" aria-label="등록">
+            <PlusCircle size={18} />
+            <span>등록</span>
+          </Link>
+          <Link href="/me/activity" className="lf-tab" aria-label="내 활동">
+            <Bell size={18} />
+            <span>내 활동</span>
+          </Link>
+          <Link href="/me/profile" className="lf-tab" aria-label="내 정보">
+            <User size={18} />
+            <span>내 정보</span>
+          </Link>
+          <Link href="/search" className="lf-tab" aria-label="검색">
+            <Search size={18} />
+            <span>검색</span>
+          </Link>
         </div>
       </nav>
     </div>
@@ -307,17 +410,6 @@ function ActivityIcon({ kind }: { kind?: ActivityItem['icon'] }) {
   const cls = 'h-5 w-5 text-slate-500'
   if (kind === 'match') return <ListChecks className={cls} />
   if (kind === 'new') return <PackageSearch className={cls} />
-  return <Search className={cls} />
+  return <LayoutDashboard className={cls} />
 }
 
-function Tab({
-  href, Icon, label, active, badge,
-}: { href: string; Icon: any; label: string; active?: boolean; badge?: number }) {
-  return (
-    <Link href={href} className={`lf-tab ${active ? 'lf-tab-active' : ''}`} aria-label={label}>
-      <Icon className="h-5 w-5" />
-      <span className="text-[11px] leading-none">{label}</span>
-      {badge && badge > 0 && <span className="lf-badge">{badge > 99 ? '99+' : badge}</span>}
-    </Link>
-  )
-}

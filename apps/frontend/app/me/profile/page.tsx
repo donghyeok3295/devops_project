@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { LogOut, Bell, MapPin, ShieldCheck, BadgeCheck, User, Settings, Sparkles, Star } from 'lucide-react'
+import Link from 'next/link'
+import { LogOut, Bell, MapPin, ShieldCheck, BadgeCheck, User, Settings, Sparkles, Star, Home, PlusCircle, Search } from 'lucide-react'
+import { getMyProfile, getMyStats } from '@/lib/api'
 
 type Profile = {
   name: string
@@ -37,29 +39,30 @@ export default function MeProfilePage() {
     return localStorage.getItem('lf_token') || sessionStorage.getItem('lf_token')
   }
 
-  // ✅ 나중에 실제 API 연결 시 여기만 바꾸면 됨
+  // 실제 API 연결
   async function fetchProfile(): Promise<Profile> {
-    // const token = getToken()
-    // const res = await fetch(`${API_BASE}/me/profile`, {
-    //   headers: token ? { Authorization: `Bearer ${token}` } : {},
-    //   credentials: 'include',
-    // })
-    // if (!res.ok) throw new Error('프로필을 불러오지 못했습니다.')
-    // return await res.json()
+    try {
+      const [profileData, statsData] = await Promise.all([
+        getMyProfile(),
+        getMyStats(),
+      ]);
 
-    // ---- UI 데모용 Mock ----
-    await new Promise(r => setTimeout(r, 450))
-    return {
-      name: '동혁',
-      role: 'FINDER',
-      joined_at: '2025-09-05',
-      reputation: 4,
-      stats: { registered: 18, matched: 7, claims: 5, handed_over: 6 },
-      badges: [
-        { id: 'first', label: '첫 등록', desc: '첫 분실물 등록 완료' },
-        { id: 'matcher', label: '매칭 마스터', desc: '5회 이상 매칭 성공' },
-        { id: 'guardian', label: '신뢰의 수호자', desc: '반환 5회 달성' },
-      ],
+      return {
+        name: profileData.email.split('@')[0], // 이메일에서 이름 추출
+        role: 'FINDER', // 모든 사용자가 FINDER
+        joined_at: '2025-09-05', // TODO: 가입일 필드 추가 필요
+        reputation: 4, // TODO: 평점 기능 추가 필요
+        stats: {
+          registered: statsData.total || 0,
+          matched: 0, // TODO: 매칭 성공 카운트 추가 필요
+          claims: 0, // TODO: 클레임 기능 추가 필요
+          handed_over: statsData.handed_over || 0,
+        },
+        badges: [], // TODO: 업적 기능 추가 필요
+      };
+    } catch (e) {
+      console.error('프로필 불러오기 실패:', e);
+      throw new Error('프로필을 불러오지 못했습니다.');
     }
   }
 
@@ -95,7 +98,16 @@ export default function MeProfilePage() {
 
   return (
     <main className="lf-page lf-profile" aria-live="polite">
-      <div className="lf-container">
+      {/* Hero (파란색 상단바) */}
+      <section className="lf-hero">
+        <div className="lf-container">
+          <p className="lf-hero-sub">내 정보</p>
+          <h1 className="lf-hero-title">내 정보</h1>
+          <p className="lf-hero-desc">프로필과 통계를 확인하세요</p>
+        </div>
+      </section>
+
+      <div className="lf-container" style={{ marginTop: '20px' }}>
         <header className="lf-profile-header lf-card" role="banner" aria-label="프로필 헤더">
           <div className="lf-profile-avatar" aria-hidden="true">
             <User size={28} />
@@ -142,7 +154,7 @@ export default function MeProfilePage() {
                   <>
                     <div className="lf-stat-value">
                       {idx === 0 && profile?.stats.registered}
-                      {idx === 1 && profile?.stats.matched}
+                      {idx === 1 && profile?.stats.handed_over}
                       {idx === 2 && profile?.stats.claims}
                       {idx === 3 && profile?.stats.handed_over}
                     </div>
@@ -244,6 +256,32 @@ export default function MeProfilePage() {
         {/* 여백(고정 탭바와 간섭 방지) */}
         <div style={{ height: 76 }} aria-hidden="true" />
       </div>
+
+      {/* 하단 TabBar */}
+      <footer className="lf-tabbar" role="navigation" aria-label="하단 탭바">
+        <div className="lf-tabbar-inner">
+          <Link href="/" className="lf-tab" aria-label="홈">
+            <Home size={18} />
+            <span>홈</span>
+          </Link>
+          <Link href="/items/new" className="lf-tab" aria-label="분실물 등록">
+            <PlusCircle size={18} />
+            <span>등록</span>
+          </Link>
+          <Link href="/me/activity" className="lf-tab" aria-label="내 활동">
+            <Bell size={18} />
+            <span>내 활동</span>
+          </Link>
+          <Link href="/me/profile" className="lf-tab lf-tab-active" aria-current="page" aria-label="내 정보">
+            <User size={18} />
+            <span>내 정보</span>
+          </Link>
+          <Link href="/search" className="lf-tab" aria-label="검색">
+            <Search size={18} />
+            <span>검색</span>
+          </Link>
+        </div>
+      </footer>
     </main>
   )
 }

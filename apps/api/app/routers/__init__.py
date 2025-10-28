@@ -7,3 +7,4 @@ from .claims import router as claims
 from .search import router as search
 from .stats import router as stats
 from .activities import router as activities
+from .me import router as me

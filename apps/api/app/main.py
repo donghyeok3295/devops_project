@@ -6,7 +6,7 @@ from sqlalchemy import text
 
 from .db import get_db, engine
 from .models import Base
-from .routers import health, auth, items, claims, search, stats, activities
+from .routers import health, auth, items, claims, search, stats, activities, me
 
 app = FastAPI(title="Smart Lost&Found API", version="1.0.0")
 
@@ -45,3 +45,4 @@ app.include_router(search)
 app.include_router(claims)
 app.include_router(stats)
 app.include_router(activities)
+app.include_router(me)

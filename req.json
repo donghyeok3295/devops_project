@@ -1,0 +1,9 @@
+{
+  "query_text": "검정색 Samsung 무선이어폰 케이스를 공학관 304에서 잃어버림",
+  "candidates": [
+    { "item_id": 12, "brand": "Samsung", "color": "black", "stored_place": "공학관 304",
+      "distance_km": 0.12, "minutes_since_found": 45 },
+    { "item_id": 99, "brand": "Apple", "color": "white", "stored_place": "기숙사 안내데스크",
+      "distance_km": 1.8, "minutes_since_found": 1440 }
+  ]
+}

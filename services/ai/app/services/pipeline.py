@@ -1,66 +1,109 @@
-from __future__ import annotations
 import math
 from typing import Any, Dict, List
-from datetime import datetime
-from app.services.rules import compute_rule_score  # 기존 간단 버전 사용
-from app.services.llm import LLMClient
+from app.config import settings
+from app.services import llm
+
+def _gaussian_distance_penalty(distance_km: float | None) -> float:
+    if distance_km is None:
+        return 1.0
+    sigma = max(settings.sigma_km, 1e-6)
+    return math.exp(-(distance_km ** 2) / (2 * sigma ** 2))
+
+def _time_decay(minutes_since_found: float | None) -> float:
+    if minutes_since_found is None:
+        return 1.0
+    half_life_mins = settings.half_life_hours * 60.0
+    if half_life_mins <= 0:
+        return 1.0
+    return 0.5 ** (minutes_since_found / half_life_mins)
+
+def _rule_score(query: str, item: Dict[str, Any]) -> float:
+    q = (query or "").lower()
+    score = 0.0
+
+    def boost(token: str | None, w: float):
+        nonlocal score
+        t = (token or "").lower()
+        if t and t in q:
+            score += w
+
+    boost(item.get("brand"), 20.0)
+    boost(item.get("color"), 15.0)
+    boost(item.get("stored_place"), 15.0)
+
+    name = (item.get("name") or "").lower()
+    features = (item.get("features_text") or "").lower()
+    for t in (name, features):
+        if t and t in q:
+            score += 10.0
+
+    score *= _gaussian_distance_penalty(item.get("distance_km"))
+    score *= _time_decay(item.get("minutes_since_found"))
+    return float(score)
 
 def _clamp01(x: float) -> float:
     return 0.0 if x < 0 else 1.0 if x > 1 else x
 
 def _softmax(xs: List[float], tau: float = 0.7) -> List[float]:
-    if not xs: return []
+    if not xs:
+        return []
     m = max(xs)
-    exps = [math.exp((x - m) / max(1e-6, tau)) for x in xs]
-    s = sum(exps) or 1.0
-    return [e / s for e in exps]
+    exps = [math.exp((x - m) / max(tau, 1e-6)) for x in xs]
+    s = sum(exps)
+    return [e / s for e in exps] if s > 0 else [0.0 for _ in xs]
 
-async def rerank(query_text: str, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    # 1) 규칙 점수
-    enriched = []
+async def rerank(user_query: str, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    라우터가 import 하는 공개 함수 이름이 반드시 'rerank' 여야 합니다.
+    """
+    if not candidates:
+        return []
+
+    enriched: List[Dict[str, Any]] = []
     for c in candidates:
-        rule = compute_rule_score(query_text, c)  # 0~1
+        rs = _rule_score(user_query, c)
         enriched.append({
-            "item_id": c["item_id"],
-            "rule_score": float(_clamp01(rule)),
-            "category": c.get("category"), "brand": c.get("brand"),
-            "color": c.get("color"), "lat": c.get("lat"), "lng": c.get("lng"),
-            "created_at": c.get("created_at"), "features_text": c.get("features_text"),
+            "item_id": c.get("item_id") or c.get("id") or c.get("ID"),
+            "brand": c.get("brand"),
+            "color": c.get("color"),
+            "stored_place": c.get("stored_place"),
+            "distance_km": c.get("distance_km"),
+            "minutes_since_found": c.get("minutes_since_found"),
+            "features_text": c.get("features_text"),
+            "rule_score": rs,
         })
 
-    # 2) 규칙점수 정렬 후 Top-50 컷
-    enriched.sort(key=lambda x: (-x["rule_score"], x["item_id"]))
-    enriched = enriched[:50] if len(enriched) > 50 else enriched
-
-    # 3) LLM 호출
+    # LLM 입력 축약
     llm_items = [{
         "item_id": e["item_id"],
-        "category": e["category"], "brand": e["brand"], "color": e["color"],
-        "lat": e["lat"], "lng": e["lng"],
-        "created_at": e["created_at"],
-        "features_text": e["features_text"],
+        "brand": e.get("brand"),
+        "color": e.get("color"),
+        "stored_place": e.get("stored_place"),
+        "distance_km": e.get("distance_km"),
+        "minutes_since_found": e.get("minutes_since_found"),
+        "features_text": e.get("features_text"),
     } for e in enriched]
 
-    client = LLMClient()
-    scores, reasons, status = await client.score(query_text, llm_items)
+    r = llm.score(user_query, llm_items)
+    raw_scores = r.get("scores", [])
+    raw_reasons = r.get("reasons", [])
 
-    # 4) 폴백 또는 안정화
-    if not scores or len(scores) != len(enriched):
-        for e in enriched:
-            e["llm_score"] = e["rule_score"]
-            e["reason_text"] = ["LLM timeout; rule-only" if status == "timeout" else "LLM error; rule-only"]
-    else:
-        sm = _softmax([_clamp01(s) for s in scores], tau=0.7)
-        for i, e in enumerate(enriched):
-            e["llm_score"] = float(_clamp01(sm[i]))
-            e["reason_text"] = [reasons[i] or "no-reason"]
+    sm = _softmax([_clamp01(float(s)) for s in raw_scores], tau=0.7)
 
-    # 5) 최종 정렬(내부): 0.3*rule + 0.7*llm
+    for i, e in enumerate(enriched):
+        e["llm_score"] = float(sm[i]) if i < len(sm) else 0.0
+        e["reason_text"] = str(raw_reasons[i]) if i < len(raw_reasons) and raw_reasons[i] is not None else "no-reason"
+
     for e in enriched:
-        e["_final"] = 0.3*e["rule_score"] + 0.7*e["llm_score"]
+        e["_final"] = 0.3 * float(e["rule_score"]) + 0.7 * float(e["llm_score"])
+
     enriched.sort(key=lambda x: (-x["_final"], x["item_id"]))
     for e in enriched:
         e.pop("_final", None)
 
-    # 6) 축소 응답
-    return [{"item_id": e["item_id"], "rule_score": e["rule_score"], "llm_score": e["llm_score"], "reason_text": e["reason_text"]} for e in enriched]
+    return [{
+        "item_id": e["item_id"],
+        "rule_score": e["rule_score"],
+        "llm_score": e["llm_score"],
+        "reason_text": e["reason_text"],
+    } for e in enriched]

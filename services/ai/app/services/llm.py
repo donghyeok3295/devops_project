@@ -1,169 +1,162 @@
-from __future__ import annotations
-import json, time, hashlib, logging
-from typing import Any, Dict, List, Tuple
+import os
+import json
+import re
 import httpx
+import math
+from typing import Any, Dict, List
 from app.config import settings
 
-logger = logging.getLogger(__name__)
+# 간단한 메모리 캐시
+_CACHE: Dict[str, Dict[str, Any]] = {}
 
-# 단순 TTL 캐시 (메모리)
-_CACHE: dict[str, tuple[float, Any]] = {}
+def _build_messages(query_text: str, items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+    n = len(items)
+    system_msg = (
+        "You are a lost-and-found matching assistant.\n"
+        "Rules:\n"
+        f"- Output ONLY a single minified JSON object: {{\"scores\":[...],\"reasons\":[...]}} with exactly {n} elements in each array.\n"
+        "- No code fences, no prose, no comments, no trailing text.\n"
+        "- scores must be floats in [0,1].\n"
+        "- reasons must be short Korean phrases explaining the score.\n"
+    )
+    user_msg = f"""
+User lost item description:
+{query_text}
 
-def _cache_get(k: str):
-    v = _CACHE.get(k)
-    if not v:
-        return None
-    expire, val = v
-    if expire < time.time():
-        _CACHE.pop(k, None)
-        return None
-    return val
+Candidate items (ordered JSON array):
+{json.dumps(items, ensure_ascii=False)}
 
-def _cache_set(k: str, val: Any, ttl: int = 900):
-    _CACHE[k] = (time.time() + ttl, val)
+Return ONLY:
+{{"scores":[...],"reasons":[...]}}
+"""
+    return [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": user_msg.strip()},
+    ]
 
-def _hash(obj: Any) -> str:
-    try:
-        return hashlib.sha256(
-            json.dumps(obj, ensure_ascii=False, sort_keys=True).encode()
-        ).hexdigest()
-    except Exception:
-        # fallback 해시 (절대 충돌 안전하진 않지만 문제 회피용)
-        return str(hash(str(obj)))
+def _strip_code_fences(s: str) -> str:
+    s = s.strip()
+    s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\s*```$", "", s)
+    return s.strip()
 
-
-PROMPT = (
-    "당신은 분실물 매칭 평가자입니다.\n"
-    "사용자 질의와 아이템 속성(카테고리, 브랜드, 색상, 특징, 좌표, 시간)을 비교해 "
-    "유사도를 0~1 사이 실수(score)로 평가하고, 이유(reason)를 1~2문장으로 설명하세요. "
-    "이유에는 실제 단어(예: '빨간색', '나이키', '현장 위치') 중 최소 1개를 포함해야 합니다.\n"
-    "반드시 JSON 객체 하나만 반환하세요. 아래 형식 외 다른 텍스트, 설명, 마크다운, 코드블록을 추가하지 마세요.\n"
-    "응답 형식 예:\n"
-    "{{\"items\": [{{\"item_id\": 123, \"score\": 0.83, \"reason\": \"빨간색 나이키 가방과 거의 일치합니다.\"}}]}}\n\n"
-    "질의: {query}\n"
-    "아이템들(JSON): {items}\n"
-)
-
-
-class LLMClient:
-    async def score(
-        self,
-        query_text: str,
-        items: List[Dict[str, Any]]
-    ) -> Tuple[List[float], List[str], str]:
-        """
-        LLM으로 유사도 점수(score)와 설명(reason)을 요청한다.
-        return (scores[], reasons[], status)
-          status ∈ {"ok", "timeout", "error", "cache"}
-        """
-
-        # 캐시 키 생성
-        key = _hash({"q": query_text, "items": items, "m": settings.llm_model})
-        cached = _cache_get(key)
-        if cached:
-            logger.info(f"[LLMClient] cache hit for query='{query_text[:30]}'")
-            return cached["scores"], cached["reasons"], "cache"
-
-        # LLM에 보낼 메시지
-        payload = {
-            "model": settings.llm_model,
-            "temperature": 0.0,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "당신은 분실물 매칭 평가자입니다. "
-                        "각 후보 아이템에 대해 0~1 유사도 점수와 짧은 이유만 JSON으로 답하세요."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": PROMPT.format(
-                        query=query_text,
-                        items=json.dumps(items, ensure_ascii=False)
-                    )
-                }
-            ],
-        }
-
-        headers = {}
-        if settings.llm_api_key:
-            headers["Authorization"] = f"Bearer {settings.llm_api_key}"
-
-        try:
-            async with httpx.AsyncClient(timeout=float(settings.llm_timeout_seconds)) as client:
-                r = await client.post(
-                    f"{settings.llm_base_url}/chat/completions",
-                    json=payload,
-                    headers=headers,
-                )
-
-            r.raise_for_status()
-            data = r.json()
-
-            # LLM 응답 본문 (우리가 파싱할 실제 JSON 문자열)
-            content = (
-                data
-                .get("choices", [{}])[0]
-                .get("message", {})
-                .get("content", "")
-                .strip()
-            )
-            if not content:
-                logger.warning("[LLMClient] empty content from LLM")
-                return [], [], "error"
-
-            # LLM이 준 content(JSON 문자열)을 dict로 변환
-            try:
-                js = json.loads(content)
-            except json.JSONDecodeError:
-                logger.error(f"[LLMClient] JSON parse error. content={content[:200]}")
-                return [], [], "error"
-
-            arr = js.get("items", [])
-            score_map: Dict[int, float] = {}
-            reason_map: Dict[int, str] = {}
-
-            for x in arr:
+def _first_balanced_json(s: str) -> dict:
+    """
+    응답 텍스트에서 첫 번째 '완전한' JSON 오브젝트를 브레이스 매칭으로 안전하게 추출.
+    """
+    s = _strip_code_fences(s)
+    # 라인 주석 제거(모델이 // ... 붙이는 경우)
+    s = re.sub(r"//.*?$", "", s, flags=re.MULTILINE)
+    start = s.find("{")
+    if start == -1:
+        return {}
+    depth = 0
+    for i in range(start, len(s)):
+        ch = s[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                frag = s[start:i+1]
                 try:
-                    item_id = int(x["item_id"])
-                    score_val = float(x.get("score", 0.0))
-                    # 점수는 0~1 클램프
-                    if score_val < 0.0:
-                        score_val = 0.0
-                    elif score_val > 1.0:
-                        score_val = 1.0
-                    score_map[item_id] = score_val
+                    return json.loads(frag)
+                except json.JSONDecodeError:
+                    break
+    return {}
 
-                    reason_text = str(x.get("reason", "")).strip() or "no-reason"
-                    reason_map[item_id] = reason_text
-                except Exception:
-                    # item_id가 없거나 score가 숫자가 아닐 때 그 항목은 스킵
-                    continue
+def _extract_first_json_object(s: str) -> Dict[str, Any]:
+    obj = _first_balanced_json(s)
+    if not isinstance(obj, dict) or not obj:
+        return {"scores": [], "reasons": []}
+    return {
+        "scores": obj.get("scores", []),
+        "reasons": obj.get("reasons", []),
+    }
 
-            # pipeline.rerank()에서 items 순서 기준으로 맞춰줘야 하므로
-            scores: List[float] = [
-                score_map.get(int(it["item_id"]), 0.0)
-                for it in items
-            ]
-            reasons: List[str] = [
-                reason_map.get(int(it["item_id"]), "no-reason")
-                for it in items
-            ]
+def _normalize(scores: List[Any], reasons: List[Any], n: int) -> Dict[str, List[Any]]:
+    """
+    - 점수: 숫자화 → NaN 방지 → [0,1]로 클램프
+    - 길이: 후보 수(n)에 맞게 패딩/절단
+    - 이유: str 변환, 공백이면 'no-reason'
+    """
+    clean_scores: List[float] = []
+    for x in (scores if isinstance(scores, list) else []):
+        try:
+            v = float(x)
+        except Exception:
+            v = 0.0
+        v = 0.0 if math.isnan(v) else max(0.0, min(1.0, v))
+        clean_scores.append(v)
 
-            _cache_set(key, {"scores": scores, "reasons": reasons})
-            logger.info(f"[LLMClient] success: {len(items)} items scored.")
-            return scores, reasons, "ok"
+    clean_reasons = [str(r) if r is not None else "" for r in (reasons if isinstance(reasons, list) else [])]
 
-        except (httpx.TimeoutException, httpx.ReadTimeout):
-            logger.warning("[LLMClient] timeout")
-            return [], [], "timeout"
+    if len(clean_scores) < n:
+        clean_scores += [0.0] * (n - len(clean_scores))
+    if len(clean_reasons) < n:
+        clean_reasons += [""] * (n - len(clean_reasons))
 
-        except httpx.RequestError as e:
-            logger.error(f"[LLMClient] HTTP error: {e}")
-            return [], [], "error"
+    clean_scores = clean_scores[:n]
+    clean_reasons = clean_reasons[:n]
+    clean_reasons = [r if r.strip() else "no-reason" for r in clean_reasons]
 
-        except Exception as e:
-            logger.exception(f"[LLMClient] unexpected error: {e}")
-            return [], [], "error"
+    return {"scores": clean_scores, "reasons": clean_reasons}
+
+def _call_llm(messages: List[Dict[str, str]], n: int) -> Dict[str, Any]:
+    url = f"{settings.llm_base_url}/chat/completions"
+    headers = {"Content-Type": "application/json"}
+    if settings.llm_api_key:
+        headers["Authorization"] = f"Bearer {settings.llm_api_key}"
+
+    # ⚠ LM Studio가 response_format을 어기는 경우가 있어도, 아래 블록은 유지/제거 둘 다 가능.
+    #   문제가 되면 주석 처리해도 파서/클램프가 수습함.
+    body = {
+        "model": settings.llm_model,
+        "messages": messages,
+        "temperature": settings.llm_temperature,
+        "max_tokens": 256,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "ScoresReasons",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "scores":  {"type": "array", "minItems": n, "maxItems": n, "items": {"type": "number", "minimum": 0, "maximum": 1}},
+                        "reasons": {"type": "array", "minItems": n, "maxItems": n, "items": {"type": "string"}}
+                    },
+                    "required": ["scores","reasons"],
+                    "additionalProperties": False
+                },
+                "strict": True
+            }
+        }
+    }
+
+    with httpx.Client(timeout=settings.llm_timeout_seconds) as client:
+        r = client.post(url, headers=headers, json=body)
+        r.raise_for_status()
+        data = r.json()
+
+    content = data["choices"][0]["message"]["content"]
+
+    if os.getenv("LLM_DEBUG") == "1":
+        print("[LLM RAW]", content[:400].replace("\n", " "))
+
+    obj = _extract_first_json_object(content)
+    return _normalize(obj.get("scores"), obj.get("reasons"), n)
+
+def score(query_text: str, items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    key = json.dumps({"q": query_text, "items": items}, ensure_ascii=False, sort_keys=True)
+    if key in _CACHE:
+        return _CACHE[key]
+    try:
+        msgs = _build_messages(query_text, items)
+        obj = _call_llm(msgs, n=len(items))
+        out = {"status": "ok", "scores": obj["scores"], "reasons": obj["reasons"]}
+    except httpx.TimeoutException:
+        out = {"status": "timeout", "scores": [], "reasons": []}
+    except Exception as e:
+        out = {"status": "error", "detail": str(e), "scores": [], "reasons": []}
+    _CACHE[key] = out
+    return out

@@ -1,0 +1,35 @@
+﻿# --- Python ---
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+
+# --- Env / Secrets ---
+.env
+.env.local
+
+# --- Editors & OS ---
+.vscode/
+.idea/
+.DS_Store
+
+# --- Logs / Results ---
+*.log
+resp.json
+test.json
+
+# --- Build / Dist ---
+dist/
+build/
+
+# --- Docker / Compose ---
+docker-compose.override.yml
+*.pid
+*.sock
+
+# --- Frontend (Next.js) ---
+node_modules/
+.next/

@@ -10,10 +10,12 @@ from .routers import health, auth, items, claims, search, stats, activities, me
 
 app = FastAPI(title="Smart Lost&Found API", version="1.0.0")
 
-# ✅ CORS 설정 (프론트엔드 허용)
+# ✅ CORS 설정 (프론트엔드 + AI 서버 허용)
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://203.234.62.47:9000",      # AI 서버
+    "http://203.234.62.47:1234",      # LLM 서버
 ]
 
 app.add_middleware(

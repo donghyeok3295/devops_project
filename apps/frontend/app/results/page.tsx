@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Home, PlusCircle, Bell, User, Search } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+const AI_BASE = process.env.NEXT_PUBLIC_AI_BASE || 'http://203.234.62.47:9000';
 
 type ResultItem = {
   id: number;
@@ -34,7 +35,7 @@ export default function ResultsPage() {
   const [items, setItems]   = useState<ResultItem[]>([]);
   const [sort, setSort]     = useState<SortKey>(sortParam);
 
-  // --- 백엔드 API 호출 ---
+  // --- AI 서버 직접 호출 ---
   useEffect(() => {
     let alive = true;
     setLoading(true);
@@ -48,24 +49,36 @@ export default function ResultsPage() {
 
     (async () => {
       try {
-        console.log('Searching for:', q);
-        const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(q)}`);
+        console.log('🔍 AI 검색 시작:', q);
+        
+        // 🔹 프론트에서 AI 서버로 직접 전송
+        const res = await fetch(`${AI_BASE}/search`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Token': 'dev-internal-secret'
+          },
+          body: JSON.stringify({
+            query_text: q
+          })
+        });
         
         if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+          console.error('AI 서버 응답 오류:', res.status);
+          throw new Error(`AI 서버 오류: ${res.status}`);
         }
 
         const data = await res.json();
-        console.log('Search results:', data);
+        console.log('✅ AI 결과:', data);
 
         if (!alive) return;
         
-        // 백엔드 응답 형식: { results: [...], query: "..." }
-        const items = data.results || data;
+        // AI 서버 응답 형식: { results: [{item_id, name, brand, color, score, reason, photos, ...}] }
+        const items = data.results || [];
         
-        // 백엔드 응답을 결과 형식으로 변환
+        // AI 응답을 결과 형식으로 변환
         const mapped: ResultItem[] = items.map((item: any) => ({
-          id: item.id,
+          id: item.item_id || item.id,
           name: item.name,
           brand: item.brand,
           color: item.color,
@@ -81,9 +94,9 @@ export default function ResultsPage() {
         setItems(mapped);
         setLoading(false);
       } catch (e) {
-        console.error('Search failed:', e);
+        console.error('❌ AI 검색 실패:', e);
         if (!alive) return;
-        setError(e instanceof Error ? e.message : '검색 실패');
+        setError(e instanceof Error ? e.message : 'AI 검색 실패');
         setLoading(false);
       }
     })();

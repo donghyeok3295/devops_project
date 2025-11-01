@@ -6,6 +6,8 @@ class Settings(BaseModel):
     ORACLE_USER: str
     ORACLE_PASSWORD: str
     JWT_SECRET: str
+    AI_SERVICE_URL: str
+    AI_INTERNAL_TOKEN: str
 
 def get_settings():
     return Settings(
@@ -13,4 +15,6 @@ def get_settings():
         ORACLE_USER=os.getenv('ORACLE_USER','lostfound'),
         ORACLE_PASSWORD=os.getenv('ORACLE_PASSWORD','secret'),
         JWT_SECRET=os.getenv('JWT_SECRET','change-me'),
+        AI_SERVICE_URL=os.getenv('AI_SERVICE_URL','http://localhost:9000'),
+        AI_INTERNAL_TOKEN=os.getenv('AI_INTERNAL_TOKEN','dev-internal-secret'),
     )

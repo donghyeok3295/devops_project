@@ -1,26 +1,17 @@
-# app/config.py
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+import os
+from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    # --- LLM ---
-    llm_base_url: str = Field("http://localhost:1234/v1", alias="LLM_BASE_URL")
-    llm_api_key: str | None = Field(None, alias="LLM_API_KEY")
-    llm_model: str = Field("gpt-4o-mini", alias="LLM_MODEL")
-    llm_timeout_seconds: float = Field(5.0, alias="LLM_TIMEOUT_SECONDS")
-    llm_retry: int = Field(1, alias="LLM_RETRY")
+    llm_base_url: str = os.getenv("LLM_BASE_URL", "http://localhost:1234/v1")
+    llm_model: str = os.getenv("LLM_MODEL", "exaone-3.5-7.8b-instruct")
+    llm_temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.2"))
+    llm_timeout_seconds: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "10.0"))
+    llm_api_key: str | None = os.getenv("LLM_API_KEY")
 
-    # --- Rules / Pipeline ---
-    sigma_km: float = Field(2.0, alias="SIGMA_KM")
-    half_life_hours: float = Field(72.0, alias="HALF_LIFE_HOURS")
-    topk_limit: int = Field(50, alias="TOPK_LIMIT")
-    cache_ttl_seconds: int = Field(900, alias="CACHE_TTL_SECONDS")
-    log_level: str = Field("INFO", alias="LOG_LEVEL")
+    ai_internal_token: str | None = os.getenv("AI_INTERNAL_TOKEN")
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",   # ← 추후 .env에 키 추가돼도 즉시 죽지 않게
-    )
+    # 규칙점수 파라미터
+    sigma_km: float = float(os.getenv("SIGMA_KM", "1.0"))          # 거리 감쇠 표준편차(km)
+    half_life_hours: float = float(os.getenv("HALF_LIFE_HOURS", "72"))  # 시간 감쇠 half-life(시간)
 
 settings = Settings()

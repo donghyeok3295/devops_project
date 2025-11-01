@@ -1,6 +1,8 @@
 fastapi
 uvicorn[standard]
 pydantic
+pydantic-settings
 SQLAlchemy
-cx_Oracle; platform_system == 'Windows' or platform_system == 'Linux' or platform_system == 'Darwin'
+oracledb
+httpx
 python-dotenv

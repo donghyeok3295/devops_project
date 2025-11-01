@@ -47,10 +47,25 @@ export default function MeProfilePage() {
         getMyStats(),
       ]);
 
+      // 가입일 포맷팅
+      let joinedDate = '알 수 없음';
+      if (profileData.created_at) {
+        try {
+          const date = new Date(profileData.created_at);
+          joinedDate = date.toLocaleDateString('ko-KR', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          });
+        } catch (e) {
+          console.error('날짜 파싱 실패:', e);
+        }
+      }
+
       return {
         name: profileData.email.split('@')[0], // 이메일에서 이름 추출
         role: 'FINDER', // 모든 사용자가 FINDER
-        joined_at: '2025-09-05', // TODO: 가입일 필드 추가 필요
+        joined_at: joinedDate,
         reputation: 4, // TODO: 평점 기능 추가 필요
         stats: {
           registered: statsData.total || 0,

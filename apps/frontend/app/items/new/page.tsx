@@ -90,7 +90,7 @@ function Pills({
   options, value, onChange, max = Infinity, disabled = false,
 }: { options: string[]; value: string[]; onChange: (v: string[]) => void; max?: number; disabled?: boolean }) {
   return (
-    <div className="pills flex flex-wrap gap-2">
+    <div className="pills">
       {options.map((opt) => {
         const active = value.includes(opt)
         return (
@@ -103,9 +103,7 @@ function Pills({
               if (active) onChange(value.filter((v) => v !== opt))
               else if (value.length < max) onChange([...value, opt])
             }}
-            className={`pill rounded-full border px-3 py-2 text-sm
-              ${active ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700'}
-              ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-50'}`}
+            className={`pill ${active ? 'is-active' : ''}`}
           >
             {opt}
           </button>

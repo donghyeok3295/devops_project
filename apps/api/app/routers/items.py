@@ -119,6 +119,62 @@ def my_items(
     return rows
 
 
+# AI 서버 전용: 전체 분실물 후보 제공 (/{item_id} 위로 이동 필수!)
+@router.get("/candidates")
+def get_candidates_for_ai(
+    status: Optional[ItemStatus] = Query(ItemStatus.STORED),
+    limit: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+):
+    """
+    AI 서버 전용 엔드포인트
+    전체 분실물 후보를 AI 서버에 제공
+    
+    Headers:
+        X-Admin-Token: dev-internal-secret
+    
+    Query Params:
+        status: 분실물 상태 (기본값: STORED)
+        limit: 최대 개수 (기본값: 50)
+    
+    Returns:
+        candidates: 분실물 목록 (item_id, name, brand, color, category, stored_place, features, photos 등)
+    """
+    # 간단한 인증 체크
+    if x_admin_token != "dev-internal-secret":
+        raise HTTPException(status_code=403, detail="Forbidden - Invalid X-Admin-Token")
+    
+    # DB에서 분실물 가져오기
+    items = db.query(Item).filter(Item.status == status).order_by(Item.created_at.desc()).limit(limit).all()
+    
+    candidates = []
+    for item in items:
+        # 사진 정보 가져오기
+        photos = db.query(ItemPhoto).filter(ItemPhoto.item_id == item.id).all()
+        
+        candidates.append({
+            "item_id": item.id,
+            "name": item.name,
+            "brand": item.brand,
+            "color": item.color,
+            "category": item.category,
+            "stored_place": item.stored_place,
+            "features": item.features,
+            "material": item.material,
+            "model": item.model,
+            "size": item.size,
+            "accessories": item.accessories,
+            "serial_masked": item.serial_masked,
+            "lat": item.lat,
+            "lng": item.lng,
+            "photos": [{"url": p.url} for p in photos],
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+        })
+    
+    return {"candidates": candidates}
+
+
 # 📊 통계(게스트 허용) — mine=true이면 토큰 필수
 @router.get("/stats")
 def stats(
@@ -242,60 +298,3 @@ def patch_item(
         return {"id": item.id, "status": item.status}
     
     return {"id": item.id}
-
-
-# AI 서버 전용: 전체 분실물 후보 제공
-@router.get("/candidates")
-def get_candidates_for_ai(
-    status: Optional[ItemStatus] = Query(ItemStatus.STORED),
-    limit: int = Query(50, ge=1, le=100),
-    db: Session = Depends(get_db),
-    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
-):
-    """
-    AI 서버 전용 엔드포인트
-    전체 분실물 후보를 AI 서버에 제공
-    
-    Headers:
-        X-Admin-Token: dev-internal-secret
-    
-    Query Params:
-        status: 분실물 상태 (기본값: STORED)
-        limit: 최대 개수 (기본값: 50)
-    
-    Returns:
-        candidates: 분실물 목록 (item_id, name, brand, color, category, stored_place, features, photos 등)
-    """
-    # 간단한 인증 체크
-    if x_admin_token != "dev-internal-secret":
-        raise HTTPException(status_code=403, detail="Forbidden - Invalid X-Admin-Token")
-    
-    # DB에서 분실물 가져오기
-    items = db.query(Item).filter(Item.status == status).order_by(Item.created_at.desc()).limit(limit).all()
-    
-    candidates = []
-    for item in items:
-        # 사진 정보 가져오기
-        photos = db.query(ItemPhoto).filter(ItemPhoto.item_id == item.id).all()
-        
-        candidates.append({
-            "item_id": item.id,
-            "name": item.name,
-            "brand": item.brand,
-            "color": item.color,
-            "category": item.category,
-            "stored_place": item.stored_place,
-            "features": item.features,
-            "material": item.material,
-            "model": item.model,
-            "size": item.size,
-            "accessories": item.accessories,
-            "serial_masked": item.serial_masked,
-            "lat": item.lat,
-            "lng": item.lng,
-            "photos": [{"url": p.url} for p in photos],
-            "created_at": item.created_at.isoformat() if item.created_at else None,
-        })
-    
-    return {"candidates": candidates}
-

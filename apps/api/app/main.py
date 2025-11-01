@@ -1,50 +1,21 @@
-# apps/api/app/main.py
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from sqlalchemy import text
+from app.routers import search
 
-from .db import get_db, engine
-from .models import Base
-from .routers import health, auth, items, claims, search, stats, activities, me
+app = FastAPI(title='Smart Lost&Found API')
 
-app = FastAPI(title="Smart Lost&Found API", version="1.0.0")
-
-# ✅ CORS 설정 (프론트엔드 + AI 서버 허용)
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://203.234.62.47:9000",      # AI 서버
-    "http://203.234.62.47:1234",      # LLM 서버
-]
-
+# CORS 설정 - 다른 PC의 프론트엔드에서 접근 가능하도록
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # 개발: 모든 오리진 허용, 프로덕션: 특정 도메인만 허용
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-def on_startup():
-    Base.metadata.create_all(bind=engine)
+# 라우터 등록
+app.include_router(search.router)
 
-@app.get("/")
-def root():
-    return {"ok": True, "see": ["/health", "/db/health", "/docs"]}
-
-@app.get("/db/tables")
-def db_tables(db: Session = Depends(get_db)):
-    rows = db.execute(text("SELECT table_name FROM user_tables ORDER BY table_name")).all()
-    return {"tables": [r[0] for r in rows]}
-
-# ✅ 라우터 등록
-app.include_router(health)
-app.include_router(auth)
-app.include_router(items)
-app.include_router(search)
-app.include_router(claims)
-app.include_router(stats)
-app.include_router(activities)
-app.include_router(me)
+@app.get('/health')
+def health():
+    return {'status': 'ok'}

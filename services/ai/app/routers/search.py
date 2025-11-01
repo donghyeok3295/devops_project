@@ -32,13 +32,17 @@ async def search_endpoint(
     
     try:
         async with httpx.AsyncClient() as client:
-            # 그냥 /items 엔드포인트 사용 (공개)
-            response = await client.get(f"{backend_url}/items")
+            # /items/candidates 엔드포인트 사용 (X-Admin-Token으로 인증)
+            response = await client.get(
+                f"{backend_url}/items/candidates",
+                headers={"X-Admin-Token": configured_token}
+            )
             
             if response.status_code != 200:
                 raise HTTPException(status_code=500, detail="Failed to fetch items from backend")
             
-            items = response.json()
+            data = response.json()
+            items = data.get("candidates", [])
             
             if not items:
                 return SearchResponse(results=[])

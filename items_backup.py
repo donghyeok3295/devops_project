@@ -298,3 +298,4 @@ def get_candidates_for_ai(
         })
     
     return {"candidates": candidates}
+

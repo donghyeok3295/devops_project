@@ -52,43 +52,57 @@ async def search_endpoint(
             if not items:
                 return SearchResponse(results=[])
             
-            # 후보 데이터 준비
+            # 후보 데이터 준비 (안전한 ID 추출)
             candidates = []
             for item in items:
+                # id, item_id, ID 모두 시도 (방어 코드)
+                item_id = item.get("id") or item.get("item_id") or item.get("ID")
+                
                 candidate = {
-                    "item_id": item.get("id"),  # 백엔드는 "id" 필드 사용
+                    "item_id": item_id,
                     "name": item.get("name"),
                     "category": item.get("category"),
                     "brand": item.get("brand"),
                     "color": item.get("color"),
                     "stored_place": item.get("stored_place"),
+                    "features_text": item.get("features"),  # pipeline에서 사용
                 }
                 candidates.append(candidate)
             
             # Rerank 실행
             ranked_results = await run_pipeline(req.query_text, candidates)
             
-            # 결과 포맷팅
+            # 결과 포맷팅 (안전한 매칭)
             results = []
             for result in ranked_results:
                 item_id = result.get("item_id")
-                # 원본 아이템 찾기
-                original_item = next((i for i in items if i.get("id") == item_id), None)
+                
+                # 원본 아이템 찾기 (id 또는 item_id로 매칭)
+                original_item = next(
+                    (i for i in items if (i.get("id") == item_id or i.get("item_id") == item_id)),
+                    None
+                )
                 
                 if original_item:
+                    # 안전한 사진 URL 추출
+                    photos = original_item.get("photos", [])
+                    thumb_url = None
+                    if photos and len(photos) > 0:
+                        thumb_url = photos[0].get("url") if isinstance(photos[0], dict) else None
+                    
                     results.append({
                         "item_id": item_id,
                         "id": item_id,
-                        "name": original_item.get("name"),
+                        "name": original_item.get("name", "이름 없음"),
                         "brand": original_item.get("brand"),
                         "color": original_item.get("color"),
                         "category": original_item.get("category"),
                         "stored_place": original_item.get("stored_place"),
-                        "photos": original_item.get("photos", []),
-                        "thumb_url": original_item.get("photos", [{}])[0].get("url") if original_item.get("photos") else None,
+                        "photos": photos,
+                        "thumb_url": thumb_url,
                         "created_at": original_item.get("created_at"),
                         "score": result.get("llm_score", 0),
-                        "reason": result.get("reason_text", ""),
+                        "reason": result.get("reason_text", "매칭 정보 없음"),
                     })
             
             return SearchResponse(results=results)

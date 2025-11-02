@@ -31,18 +31,23 @@ async def search_endpoint(
     backend_url = os.getenv("BACKEND_API_URL", "http://203.234.62.84:8000")
     
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             # /items/candidates 엔드포인트 사용 (X-Admin-Token으로 인증)
+            print(f"[DEBUG] Fetching from: {backend_url}/items/candidates")
             response = await client.get(
                 f"{backend_url}/items/candidates",
                 headers={"X-Admin-Token": configured_token}
             )
             
+            print(f"[DEBUG] Response status: {response.status_code}")
             if response.status_code != 200:
+                print(f"[DEBUG] Response text: {response.text}")
                 raise HTTPException(status_code=500, detail="Failed to fetch items from backend")
             
             data = response.json()
+            print(f"[DEBUG] Response data: {data}")
             items = data.get("candidates", [])
+            print(f"[DEBUG] Number of items: {len(items)}")
             
             if not items:
                 return SearchResponse(results=[])
@@ -51,7 +56,7 @@ async def search_endpoint(
             candidates = []
             for item in items:
                 candidate = {
-                    "item_id": item.get("item_id"),  # ← 수정: "id" → "item_id"
+                    "item_id": item.get("id"),  # 백엔드는 "id" 필드 사용
                     "name": item.get("name"),
                     "category": item.get("category"),
                     "brand": item.get("brand"),

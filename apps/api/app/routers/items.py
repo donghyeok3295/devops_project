@@ -154,7 +154,8 @@ def get_candidates_for_ai(
         photos = db.query(ItemPhoto).filter(ItemPhoto.item_id == item.id).all()
         
         candidates.append({
-            "item_id": item.id,
+            "id": item.id,  # AI 서비스가 "id" 필드를 사용
+            "item_id": item.id,  # 호환성을 위해 item_id도 유지
             "name": item.name,
             "brand": item.brand,
             "color": item.color,

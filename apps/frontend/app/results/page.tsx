@@ -76,10 +76,10 @@ export default function ResultsPage() {
         // AI 서버 응답 형식: { results: [{item_id, name, brand, color, score, reason, photos, ...}] }
         const items = data.results || [];
         
-        // AI 응답을 결과 형식으로 변환
-        const mapped: ResultItem[] = items.map((item: any) => ({
-          id: item.item_id || item.id,
-          name: item.name,
+        // AI 응답을 결과 형식으로 변환 (안전한 ID 처리)
+        const mapped: ResultItem[] = items.map((item: any, index: number) => ({
+          id: item.item_id || item.id || index + 1000,  // fallback: 인덱스 사용
+          name: item.name || '이름 없음',
           brand: item.brand,
           color: item.color,
           category: item.category,

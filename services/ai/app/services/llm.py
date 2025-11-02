@@ -11,28 +11,49 @@ _CACHE: Dict[str, Dict[str, Any]] = {}
 
 def _build_messages(query_text: str, items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     n = len(items)
-    system_msg = "당신은 분실물 매칭 AI입니다. 사용자가 잃어버린 물건과 후보 물건들의 유사도를 평가하세요."
+    system_msg = "당신은 분실물 매칭 전문가입니다. 사용자가 찾는 물건과 보관 중인 물건들의 유사도를 정확히 평가하세요."
     
-    # 더 간단한 포맷으로 아이템 정보 구성
+    # 아이템 정보를 상세하게 구성
     items_desc = []
     for i, item in enumerate(items):
-        desc = f"{i+1}번: "
+        parts = [f"{i+1}번:"]
+        
+        # 이름이 가장 중요!
+        if item.get("name"):
+            parts.append(f"이름={item['name']}")
+        
+        # 카테고리
+        if item.get("category"):
+            parts.append(f"분류={item['category']}")
+        
+        # 브랜드
         if item.get("brand"):
-            desc += f"{item['brand']} "
+            parts.append(f"브랜드={item['brand']}")
+        
+        # 색상
         if item.get("color"):
-            desc += f"{item['color']}색 "
+            parts.append(f"색상={item['color']}")
+        
+        # 보관 위치
+        if item.get("stored_place"):
+            parts.append(f"위치={item['stored_place']}")
+        
+        # 특징
         if item.get("features_text"):
-            desc += f"({item['features_text']})"
-        items_desc.append(desc)
+            parts.append(f"특징={item['features_text']}")
+        
+        items_desc.append(" | ".join(parts))
     
     user_msg = f"""사용자가 찾는 물건: {query_text}
 
-후보 물건들:
+보관 중인 후보 물건들:
 {chr(10).join(items_desc)}
 
-각 후보에 대해:
-1. 유사도 점수 (0~1 사이 소수)
-2. 한국어로 짧은 이유
+각 후보마다:
+1. 사용자가 찾는 물건과의 유사도 점수 (0.0~1.0, 정확히 일치=1.0, 무관=0.0)
+2. 짧은 매칭 이유 (한국어)
+
+중요: 이름, 분류, 브랜드, 색상을 모두 고려하여 정확히 평가하세요.
 
 JSON 형식으로만 답변:
 {{"scores":[0.9, 0.7, ...], "reasons":["이유1", "이유2", ...]}}"""

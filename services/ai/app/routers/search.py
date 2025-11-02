@@ -52,7 +52,7 @@ async def search_endpoint(
             if not items:
                 return SearchResponse(results=[])
             
-            # 후보 데이터 준비 (안전한 ID 추출)
+            # 후보 데이터 준비 (안전한 ID 추출, 모든 필드 전달)
             candidates = []
             for item in items:
                 # id, item_id, ID 모두 시도 (방어 코드)
@@ -60,12 +60,12 @@ async def search_endpoint(
                 
                 candidate = {
                     "item_id": item_id,
-                    "name": item.get("name"),
+                    "name": item.get("name"),  # LLM이 이름을 보도록!
                     "category": item.get("category"),
                     "brand": item.get("brand"),
                     "color": item.get("color"),
                     "stored_place": item.get("stored_place"),
-                    "features_text": item.get("features"),  # pipeline에서 사용
+                    "features_text": item.get("features"),  # 특징 설명
                 }
                 candidates.append(candidate)
             

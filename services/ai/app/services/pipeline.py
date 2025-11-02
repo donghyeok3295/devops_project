@@ -64,6 +64,8 @@ async def rerank(user_query: str, candidates: List[Dict[str, Any]]) -> List[Dict
         rs = _rule_score(user_query, c)
         enriched.append({
             "item_id": c.get("item_id") or c.get("id") or c.get("ID"),
+            "name": c.get("name"),  # ⭐ name 추가!
+            "category": c.get("category"),  # ⭐ category 추가!
             "brand": c.get("brand"),
             "color": c.get("color"),
             "stored_place": c.get("stored_place"),
@@ -73,9 +75,11 @@ async def rerank(user_query: str, candidates: List[Dict[str, Any]]) -> List[Dict
             "rule_score": rs,
         })
 
-    # LLM 입력 축약
+    # LLM 입력에 name과 category 포함!
     llm_items = [{
         "item_id": e["item_id"],
+        "name": e.get("name"),  # ⭐ LLM이 이름을 보도록!
+        "category": e.get("category"),  # ⭐ LLM이 카테고리를 보도록!
         "brand": e.get("brand"),
         "color": e.get("color"),
         "stored_place": e.get("stored_place"),

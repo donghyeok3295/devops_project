@@ -51,7 +51,7 @@ async def search_endpoint(
             candidates = []
             for item in items:
                 candidate = {
-                    "item_id": item.get("id"),
+                    "item_id": item.get("item_id"),  # ← 수정: "id" → "item_id"
                     "name": item.get("name"),
                     "category": item.get("category"),
                     "brand": item.get("brand"),

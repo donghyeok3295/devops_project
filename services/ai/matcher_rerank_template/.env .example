@@ -1,0 +1,21 @@
+# LLM (LM Studio/Mock)
+LLM_BASE_URL=http://localhost:1234/v1
+LLM_MODEL=exaone
+LLM_TEMPERATURE=0.2
+LLM_TIMEOUT_SECONDS=10.0
+
+# internal auth (둘 중 아무거나 세팅해도 됨)
+AI_INTERNAL_TOKEN=dev-internal-secret
+ADMIN_TOKEN=dev-internal-secret
+
+# rule params
+SIGMA_KM=2.0
+HALF_LIFE_HOURS=72.0
+
+# (옵션) Oracle 헬스 체크
+DB_USER=lostfound
+DB_PASSWORD=secret
+DB_HOST=localhost
+DB_PORT=1521
+DB_SERVICE=FREEPDB1
+DB_ECHO=true

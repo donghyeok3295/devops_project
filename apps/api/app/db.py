@@ -3,6 +3,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.engine import URL
 from .config import get_settings
+from fastapi import HTTPException
 
 settings = get_settings()
 
@@ -39,8 +40,17 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 
 def get_db():
-    db = SessionLocal()
+    db = None
     try:
+        db = SessionLocal()
         yield db
+    except Exception as e:
+        print(f"Database connection failed: {e}")
+        # DB 연결 실패 시 503 Service Unavailable 반환
+        raise HTTPException(
+            status_code=503, 
+            detail="Database service is currently unavailable."
+        )
     finally:
-        db.close()
+        if db:
+            db.close()

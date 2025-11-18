@@ -1,12 +1,12 @@
 services:
   frontend:
-    build: ../apps/frontend
-    command: npm run dev
+    image: node:20-alpine
+    command: sh -c "npm install && npm run dev"
     working_dir: /app
     volumes:
       - ../apps/frontend:/app
     ports:
-      - '3000:3000'
+      - '3001:3000'
     environment:
       - NEXT_PUBLIC_API_BASE=http://localhost:8000
 
@@ -18,9 +18,9 @@ services:
     ports:
       - '8000:8000'
     environment:
-      - ORACLE_DSN=oracle:1521/FREEPDB1
-      - ORACLE_USER=lostfound
-      - ORACLE_PASSWORD=secret
+      - ORACLE_DSN=203.234.62.84:1521/FREEPDB1
+      - ORACLE_USER=admin
+      - ORACLE_PASSWORD=1234
 
   ai:
     build: ../services/ai
@@ -29,16 +29,21 @@ services:
       - ../services/ai:/app
     ports:
       - '9000:9000'
-
-  oracle:
-    image: gvenzl/oracle-free:23-slim
     environment:
-      - ORACLE_PASSWORD=secret
-    ports:
-      - '1521:1521'
-      - '5500:5500'
-    volumes:
-      - oracle-data:/opt/oracle/oradata
+      - ORACLE_DSN=203.234.62.84:1521/FREEPDB1
+      - ORACLE_USER=admin
+      - ORACLE_PASSWORD=1234
+      - BACKEND_API_URL=http://localhost:8000
 
-volumes:
-  oracle-data:
+#  oracle:
+#    image: gvenzl/oracle-free:23-slim
+#    environment:
+#      - ORACLE_PASSWORD=1234
+#    ports:
+#      - '1521:1521'
+#      - '5500:5500'
+#    volumes:
+#      - oracle-data:/opt/oracle/oradata
+
+#volumes:
+#  oracle-data:

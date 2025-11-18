@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import search
+from app.routers import search, auth, me, items
 
 app = FastAPI(title='Smart Lost&Found API')
 
@@ -14,7 +14,10 @@ app.add_middleware(
 )
 
 # 라우터 등록
-app.include_router(search.router)
+app.include_router(search)
+app.include_router(auth)
+app.include_router(me)
+app.include_router(items)
 
 @app.get('/health')
 def health():

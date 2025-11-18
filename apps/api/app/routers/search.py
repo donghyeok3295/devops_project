@@ -71,7 +71,9 @@ def search_items(payload: SearchQuery, db: Session = Depends(get_db)):
             "stored_place": item.stored_place,
         })
     
-    return items
+    from fastapi.encoders import jsonable_encoder
+    from fastapi import Response
+    return Response(content=jsonable_encoder(items), media_type="application/json", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 # 🔍 GET 방식 검색 (AI 서버 통합)
 @router.get("")
@@ -166,7 +168,9 @@ async def search_items_get(
     results.sort(key=lambda x: x["score"], reverse=True)
     
     # Top 10 반환
-    return {"results": results[:10], "query": q}
+    from fastapi.encoders import jsonable_encoder
+    from fastapi import Response
+    return Response(content=jsonable_encoder({"results": results[:10], "query": q}), media_type="application/json", headers={"Cache-Control": "no-cache, no-store, must-revalidate"})
 
 
 def _fallback_search(q: str, candidates: List[Item], db: Session):

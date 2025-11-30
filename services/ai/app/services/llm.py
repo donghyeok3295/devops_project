@@ -3,65 +3,9 @@ import json
 import re
 import httpx
 import math
-from typing import Any, Dict, List
+from typing import Any, Dict
 from app.config import settings
 
-# 간단한 메모리 캐시
-_CACHE: Dict[str, Dict[str, Any]] = {}
-
-def _build_messages(query_text: str, items: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-    n = len(items)
-    system_msg = "당신은 분실물 매칭 전문가입니다. 사용자가 찾는 물건과 보관 중인 물건들의 유사도를 정확히 평가하세요."
-    
-    # 아이템 정보를 상세하게 구성
-    items_desc = []
-    for i, item in enumerate(items):
-        parts = [f"{i+1}번:"]
-        
-        # 이름이 가장 중요!
-        if item.get("name"):
-            parts.append(f"이름={item['name']}")
-        
-        # 카테고리
-        if item.get("category"):
-            parts.append(f"분류={item['category']}")
-        
-        # 브랜드
-        if item.get("brand"):
-            parts.append(f"브랜드={item['brand']}")
-        
-        # 색상
-        if item.get("color"):
-            parts.append(f"색상={item['color']}")
-        
-        # 보관 위치
-        if item.get("stored_place"):
-            parts.append(f"위치={item['stored_place']}")
-        
-        # 특징
-        if item.get("features_text"):
-            parts.append(f"특징={item['features_text']}")
-        
-        items_desc.append(" | ".join(parts))
-    
-    user_msg = f"""사용자가 찾는 물건: {query_text}
-
-보관 중인 후보 물건들:
-{chr(10).join(items_desc)}
-
-각 후보마다:
-1. 사용자가 찾는 물건과의 유사도 점수 (0.0~1.0, 정확히 일치=1.0, 무관=0.0)
-2. 짧은 매칭 이유 (한국어)
-
-중요: 이름, 분류, 브랜드, 색상을 모두 고려하여 정확히 평가하세요.
-
-JSON 형식으로만 답변:
-{{"scores":[0.9, 0.7, ...], "reasons":["이유1", "이유2", ...]}}"""
-
-    return [
-        {"role": "system", "content": system_msg},
-        {"role": "user", "content": user_msg.strip()},
-    ]
 
 def _strip_code_fences(s: str) -> str:
     s = s.strip()
@@ -69,80 +13,91 @@ def _strip_code_fences(s: str) -> str:
     s = re.sub(r"\s*```$", "", s)
     return s.strip()
 
-def _first_balanced_json(s: str) -> dict:
+
+def _extract_json(s: str) -> dict:
     """
-    응답 텍스트에서 첫 번째 '완전한' JSON 오브젝트를 브레이스 매칭으로 안전하게 추출.
+    모델이 출력한 텍스트에서 첫 번째 JSON 객체만 안전하게 추출.
     """
     s = _strip_code_fences(s)
-    # 라인 주석 제거(모델이 // ... 붙이는 경우)
-    s = re.sub(r"//.*?$", "", s, flags=re.MULTILINE)
+
     start = s.find("{")
     if start == -1:
         return {}
+
     depth = 0
     for i in range(start, len(s)):
-        ch = s[i]
-        if ch == "{":
+        if s[i] == "{":
             depth += 1
-        elif ch == "}":
+        elif s[i] == "}":
             depth -= 1
             if depth == 0:
-                frag = s[start:i+1]
+                fragment = s[start:i+1]
                 try:
-                    return json.loads(frag)
-                except json.JSONDecodeError:
-                    break
+                    return json.loads(fragment)
+                except:
+                    return {}
     return {}
 
-def _extract_first_json_object(s: str) -> Dict[str, Any]:
-    obj = _first_balanced_json(s)
-    if not isinstance(obj, dict) or not obj:
-        return {"scores": [], "reasons": []}
-    return {
-        "scores": obj.get("scores", []),
-        "reasons": obj.get("reasons", []),
-    }
 
-def _normalize(scores: List[Any], reasons: List[Any], n: int) -> Dict[str, List[Any]]:
+def _build_messages(user_input: Dict[str, Any], candidate: Dict[str, Any], rule_score: float):
     """
-    - 점수: 숫자화 → NaN 방지 → [0,1]로 클램프
-    - 길이: 후보 수(n)에 맞게 패딩/절단
-    - 이유: str 변환, 공백이면 'no-reason'
+    LLM이 해야 할 일:
+    - 백엔드에서 계산한 rule_score를 기반으로 보정 점수를 계산
+    - 최종 llm_score (0~1 범위)를 반환
     """
-    clean_scores: List[float] = []
-    for x in (scores if isinstance(scores, list) else []):
-        try:
-            v = float(x)
-        except Exception:
-            v = 0.0
-        v = 0.0 if math.isnan(v) else max(0.0, min(1.0, v))
-        clean_scores.append(v)
 
-    clean_reasons = [str(r) if r is not None else "" for r in (reasons if isinstance(reasons, list) else [])]
+    system_msg = """
+당신은 분실물 매칭 시스템의 평가 모델입니다.
+당신의 역할은 백엔드에서 계산한 rule_score를 기반으로 최종 llm_score를 0~1 범위로 산정하는 것입니다.
+"user_input"과 "candidate"는 물품의 속성을 포함합니다.
+설명은 최소화하고, 반드시 JSON으로만 출력해야 합니다.
+""".strip()
 
-    if len(clean_scores) < n:
-        clean_scores += [0.0] * (n - len(clean_scores))
-    if len(clean_reasons) < n:
-        clean_reasons += [""] * (n - len(clean_reasons))
+    user_msg = f"""
+아래는 비교 대상입니다.
 
-    clean_scores = clean_scores[:n]
-    clean_reasons = clean_reasons[:n]
-    clean_reasons = [r if r.strip() else "no-reason" for r in clean_reasons]
+[사용자 입력]
+{json.dumps(user_input, ensure_ascii=False)}
 
-    return {"scores": clean_scores, "reasons": clean_reasons}
+[DB 물품 정보]
+{json.dumps(candidate, ensure_ascii=False)}
 
-def _call_llm(messages: List[Dict[str, str]], n: int) -> Dict[str, Any]:
+[백엔드 계산 rule_score]
+{rule_score}
+
+당신의 작업:
+1. rule_score를 기반으로 추가적인 보정 점수를 계산하세요.
+2. llm_score는 0~1 사이의 값이어야 합니다.
+3. 반드시 다음 JSON 형식 EXACT 그대로 출력하세요:
+
+{{
+  "llm_score": <0~1 숫자>,
+  "reason": "<간단한 이유>"
+}}
+
+JSON 외 문장 금지.
+""".strip()
+
+    return [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": user_msg},
+    ]
+
+
+def _call_llm(messages):
+    """
+    LM Studio(또는 OpenAI 호환 API) 호출
+    """
     url = f"{settings.llm_base_url}/chat/completions"
     headers = {"Content-Type": "application/json"}
     if settings.llm_api_key:
         headers["Authorization"] = f"Bearer {settings.llm_api_key}"
 
-    # 더 단순한 요청 (JSON Schema 제거)
     body = {
         "model": settings.llm_model,
         "messages": messages,
-        "temperature": 0.3,  # 더 결정적인 출력
-        "max_tokens": 512,   # 토큰 늘림
+        "temperature": 0.2,
+        "max_tokens": 256
     }
 
     with httpx.Client(timeout=settings.llm_timeout_seconds) as client:
@@ -152,35 +107,46 @@ def _call_llm(messages: List[Dict[str, str]], n: int) -> Dict[str, Any]:
 
     content = data["choices"][0]["message"]["content"]
 
-    # 디버깅 출력 (항상 출력)
-    print(f"[LLM DEBUG] Query items: {n}")
-    print(f"[LLM RAW Response]: {content[:500]}")
+    print("[LLM RAW]", content)
 
-    obj = _extract_first_json_object(content)
-    
-    # 파싱 결과 확인
-    print(f"[LLM Parsed] scores: {obj.get('scores', [])}")
-    print(f"[LLM Parsed] reasons: {obj.get('reasons', [])}")
-    
-    result = _normalize(obj.get("scores"), obj.get("reasons"), n)
-    
-    # 정규화 결과 확인
-    print(f"[LLM Normalized] scores: {result['scores']}")
-    print(f"[LLM Normalized] reasons: {result['reasons']}")
-    
-    return result
+    obj = _extract_json(content)
 
-def score(query_text: str, items: List[Dict[str, Any]]) -> Dict[str, Any]:
-    key = json.dumps({"q": query_text, "items": items}, ensure_ascii=False, sort_keys=True)
-    if key in _CACHE:
-        return _CACHE[key]
+    return obj
+
+
+def score(user_input: Dict[str, Any], candidate: Dict[str, Any], rule_score: float) -> Dict[str, Any]:
+    """
+    LLM 기반 보정 점수 계산
+    - user_input, candidate, rule_score를 기반으로 llm_score를 계산
+    """
+
     try:
-        msgs = _build_messages(query_text, items)
-        obj = _call_llm(msgs, n=len(items))
-        out = {"status": "ok", "scores": obj["scores"], "reasons": obj["reasons"]}
-    except httpx.TimeoutException:
-        out = {"status": "timeout", "scores": [], "reasons": []}
+        msgs = _build_messages(user_input, candidate, rule_score)
+        obj = _call_llm(msgs)
+
+        # JSON 파싱 실패 → fallback
+        if "llm_score" not in obj:
+            return {
+                "llm_score": 0.0,
+                "reason": "Parsing failed (fallback applied)"
+            }
+
+        # 점수 정규화
+        try:
+            s = float(obj["llm_score"])
+        except:
+            s = 0.0
+
+        s = max(0.0, min(1.0, s))
+
+        return {
+            "llm_score": s,
+            "reason": obj.get("reason", "no-reason")
+        }
+
     except Exception as e:
-        out = {"status": "error", "detail": str(e), "scores": [], "reasons": []}
-    _CACHE[key] = out
-    return out
+        print("[LLM ERROR]", e)
+        return {
+            "llm_score": 0.0,
+            "reason": f"error: {str(e)}"
+        }

@@ -19,6 +19,7 @@ out/
 # 🐍 Python / FastAPI
 # =========================
 .venv/
+venv/
 __pycache__/
 *.py[cod]
 *.pyo
@@ -68,3 +69,14 @@ build/
 # =========================
 apps/frontend/.openapi-types/
 apps/frontend/.next-types/
+
+# =========================
+# 🧪 Test / Script files
+# =========================
+test_*.py
+test_*.ps1
+test_*.json
+*.ps1
+quick-start.ps1
+restart-frontend.ps1
+git-setup.ps1

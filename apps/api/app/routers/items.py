@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 
 from ..db import get_db
-from ..models import Item, ItemPhoto, ItemStatus
+from ..models import Item, ItemPhoto, ItemStatus, MatchLog
 from ..security import get_current_user_optional, get_current_user
 
 router = APIRouter(prefix="/items", tags=["items"])
@@ -174,6 +174,44 @@ def get_candidates_for_ai(
         })
     
     return {"candidates": candidates}
+
+
+# 🔍 AI 검색 로그 저장 (AI 서버 전용)
+class SearchLogIn(BaseModel):
+    query_text: str
+    results: List[dict]  # [{"item_id": 1, "score": 85.5, "reason": "..."}]
+    user_id: Optional[int] = None
+
+@router.post("/search-logs")
+def save_search_logs(
+    payload: SearchLogIn,
+    db: Session = Depends(get_db),
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+):
+    """
+    AI 서버가 검색 결과를 로그로 저장
+    각 매칭 결과마다 MatchLog 레코드 생성
+    
+    Headers:
+        X-Admin-Token: dev-internal-secret (AI 서버만 호출 가능)
+    """
+    # 인증 체크
+    if x_admin_token != "dev-internal-secret":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    
+    # 각 결과를 로그로 저장
+    for result in payload.results:
+        log = MatchLog(
+            user_id=payload.user_id,
+            query_text=payload.query_text,
+            item_id=result.get("item_id") or result.get("id"),
+            ai_score=result.get("score") or result.get("llm_score"),
+            ai_reason=result.get("reason") or result.get("reason_text"),
+        )
+        db.add(log)
+    
+    db.commit()
+    return {"ok": True, "saved": len(payload.results)}
 
 
 # 📊 통계(게스트 허용) — mine=true이면 토큰 필수

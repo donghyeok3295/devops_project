@@ -28,7 +28,8 @@ async def search_endpoint(
         raise HTTPException(status_code=400, detail="Empty query_text")
 
     # 백엔드 API에서 모든 아이템 가져오기
-    backend_url = os.getenv("BACKEND_API_URL", "http://203.234.62.84:8000")
+    # 백엔드가 로컬에서 실행 중이면 localhost:8000 사용
+    backend_url = os.getenv("BACKEND_API_URL", "http://localhost:8000")
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -104,6 +105,30 @@ async def search_endpoint(
                         "score": result.get("llm_score", 0),
                         "reason": result.get("reason_text", "매칭 정보 없음"),
                     })
+            
+            # 🔍 검색 로그를 백엔드에 저장 (백그라운드)
+            try:
+                log_data = {
+                    "query_text": req.query_text,
+                    "results": [
+                        {
+                            "item_id": r["item_id"],
+                            "score": r["score"],
+                            "reason": r["reason"]
+                        }
+                        for r in results[:10]  # Top 10만 로그
+                    ],
+                    "user_id": None  # 비로그인 사용자 (프론트엔드에서 로그인 정보 전달 시 추가)
+                }
+                await client.post(
+                    f"{backend_url}/items/search-logs",
+                    json=log_data,
+                    headers={"X-Admin-Token": configured_token}
+                )
+                print(f"[DEBUG] Search logs saved: {len(log_data['results'])} results")
+            except Exception as log_error:
+                # 로그 저장 실패해도 검색 결과는 반환
+                print(f"[WARNING] Failed to save search logs: {log_error}")
             
             return SearchResponse(results=results)
             

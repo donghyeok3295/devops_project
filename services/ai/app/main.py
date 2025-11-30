@@ -8,10 +8,11 @@ from app.routers import rerank, health, search
 app = FastAPI(title="AI Matcher Rerank API", version="0.1.0")
 
 # CORS 설정
+# credentials 사용 시 "*" 불가, 명시적 오리진 필요
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,  # credentials 비활성화하여 "*" 허용
     allow_methods=["*"],
     allow_headers=["*"],
 )

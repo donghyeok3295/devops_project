@@ -111,9 +111,10 @@ def get_my_activities(
                 "type": "RETURNED",
                 "title": f"{item.name} 분실물 반환",
                 "desc": f"{item.name} — 반환 완료",
-                "ago": _time_ago(item.created_at),  # 등록 시점 기준으로 정렬
+                "ago": _time_ago(item.created_at),
                 "badge": "DONE",
-                "icon": "CHECK"
+                "icon": "CHECK",
+                "created_at": item.created_at  # 정렬용
             })
         else:
             # 보관 중인 경우에는 등록 기록만 추가
@@ -124,11 +125,16 @@ def get_my_activities(
                 "desc": f"{item.name} — {item.status}",
                 "ago": _time_ago(item.created_at),
                 "badge": "ONGOING",
-                "icon": "CLOCK"
+                "icon": "CLOCK",
+                "created_at": item.created_at  # 정렬용
             })
     
-    # 시간 순으로 정렬 (최신순)
-    activities.sort(key=lambda x: x["ago"], reverse=True)
+    # 시간 순으로 정렬 (최신순) - created_at 필드 기준
+    activities.sort(key=lambda x: x.get("created_at") or datetime.min, reverse=True)
+    
+    # created_at 필드 제거 후 반환
+    for act in activities:
+        act.pop("created_at", None)
     
     return activities[:limit] if len(activities) > limit else activities
 

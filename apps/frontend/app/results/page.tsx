@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { Home, PlusCircle, Bell, User, Search } from 'lucide-react';
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { Home, PlusCircle, Bell, User, Search } from "lucide-react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
-const AI_BASE = process.env.NEXT_PUBLIC_AI_BASE || 'http://203.234.62.47:9000';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000";
+const AI_BASE = process.env.NEXT_PUBLIC_AI_BASE || "http://localhost:9000";
 
 type ResultItem = {
   id: number;
@@ -22,18 +22,18 @@ type ResultItem = {
   reason?: string;
 };
 
-type SortKey = 'score' | 'recent';
+type SortKey = "score" | "recent";
 
 export default function ResultsPage() {
   const router = useRouter();
   const sp = useSearchParams();
-  const q = sp.get('q') || '';
-  const sortParam = (sp.get('sort') as SortKey) || 'score';
+  const q = sp.get("q") || "";
+  const sortParam = (sp.get("sort") as SortKey) || "score";
 
   const [loading, setLoading] = useState(true);
-  const [error, setError]   = useState<string | null>(null);
-  const [items, setItems]   = useState<ResultItem[]>([]);
-  const [sort, setSort]     = useState<SortKey>(sortParam);
+  const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<ResultItem[]>([]);
+  const [sort, setSort] = useState<SortKey>(sortParam);
 
   // --- AI 서버 직접 호출 ---
   useEffect(() => {
@@ -49,37 +49,40 @@ export default function ResultsPage() {
 
     (async () => {
       try {
-        console.log('🔍 AI 검색 시작:', q);
-        
+        console.log("🔍 AI 검색 시작:", q);
+
         // 🔹 프론트에서 AI 서버로 직접 전송
         const res = await fetch(`${AI_BASE}/search`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'X-Admin-Token': 'dev-internal-secret'
+            "Content-Type": "application/json",
+            "X-Admin-Token": "dev-internal-secret",
           },
           body: JSON.stringify({
-            query_text: q
-          })
+            query_text: q,
+          }),
         });
-        
+
         if (!res.ok) {
-          console.error('AI 서버 응답 오류:', res.status);
-          throw new Error(`AI 서버 오류: ${res.status}`);
+          const errorText = await res.text().catch(() => "Unknown error");
+          console.error("AI 서버 응답 오류:", res.status, errorText);
+          throw new Error(
+            `AI 서버 연결 실패 (${res.status}). AI 서버가 실행 중인지 확인하세요.`,
+          );
         }
 
         const data = await res.json();
-        console.log('✅ AI 결과:', data);
+        console.log("✅ AI 결과:", data);
 
         if (!alive) return;
-        
+
         // AI 서버 응답 형식: { results: [{item_id, name, brand, color, score, reason, photos, ...}] }
         const items = data.results || [];
-        
+
         // AI 응답을 결과 형식으로 변환 (안전한 ID 처리)
         const mapped: ResultItem[] = items.map((item: any, index: number) => ({
-          id: item.item_id || item.id || index + 1000,  // fallback: 인덱스 사용
-          name: item.name || '이름 없음',
+          id: item.item_id || item.id || index + 1000, // fallback: 인덱스 사용
+          name: item.name || "이름 없음",
           brand: item.brand,
           color: item.color,
           category: item.category,
@@ -94,26 +97,28 @@ export default function ResultsPage() {
         setItems(mapped);
         setLoading(false);
       } catch (e) {
-        console.error('❌ AI 검색 실패:', e);
+        console.error("❌ AI 검색 실패:", e);
         if (!alive) return;
-        setError(e instanceof Error ? e.message : 'AI 검색 실패');
+        setError(e instanceof Error ? e.message : "AI 검색 실패");
         setLoading(false);
       }
     })();
 
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [q]);
 
   // 정렬
   const sorted = useMemo(() => {
     const arr = [...items];
-    if (sort === 'recent') {
+    if (sort === "recent") {
       arr.sort((a, b) => {
         const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
         const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
         return dateB - dateA;
       });
-    } else if (sort === 'score') {
+    } else if (sort === "score") {
       // 점수 높은 순으로 정렬
       arr.sort((a, b) => (b.score || 0) - (a.score || 0));
     }
@@ -125,7 +130,7 @@ export default function ResultsPage() {
   // URL 동기화(선택)
   useEffect(() => {
     const params = new URLSearchParams(Array.from(sp.entries()));
-    params.set('sort', sort);
+    params.set("sort", sort);
     router.replace(`/results?${params.toString()}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort]);
@@ -136,25 +141,28 @@ export default function ResultsPage() {
       <section className="lf-hero">
         <div className="lf-container">
           <p className="lf-hero-sub">검색 결과</p>
-          <h1 className="lf-hero-title">"{q || '키워드 없음'}"의 결과</h1>
+          <h1 className="lf-hero-title">"{q || "키워드 없음"}"의 결과</h1>
           <p className="lf-hero-desc">검색된 분실물 목록입니다</p>
         </div>
       </section>
 
-      <div className="lf-wrap" style={{ marginTop: '-80px', paddingBottom: '100px' }}>
-
+      <div
+        className="lf-wrap"
+        style={{ marginTop: "-80px", paddingBottom: "100px" }}
+      >
         {/* 헤더 */}
         <section className="lf-header">
           <div className="lf-headerRow">
-
             <div className="lf-toolbar">
-              <label htmlFor="sort" className="lf-sortLabel">정렬</label>
+              <label htmlFor="sort" className="lf-sortLabel">
+                정렬
+              </label>
               <select
                 id="sort"
                 aria-label="정렬 기준 선택"
                 className="lf-select"
                 value={sort}
-                onChange={e => setSort(e.target.value as SortKey)}
+                onChange={(e) => setSort(e.target.value as SortKey)}
               >
                 <option value="score">유사도 점수순</option>
                 <option value="recent">최신순</option>
@@ -167,13 +175,20 @@ export default function ResultsPage() {
         <section className="lf-list">
           {loading && (
             <>
-              <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
             </>
           )}
 
           {error && (
             <div role="alert" className="lf-alert">
-              {error} <button className="lf-linkBtn" onClick={() => location.reload()}>재시도</button>
+              {error}{" "}
+              <button className="lf-linkBtn" onClick={() => location.reload()}>
+                재시도
+              </button>
             </div>
           )}
 
@@ -183,11 +198,10 @@ export default function ResultsPage() {
             </div>
           )}
 
-          {!loading && !error && sorted.map(it => (
-            <Card key={it.id} item={it} />
-          ))}
+          {!loading &&
+            !error &&
+            sorted.map((it) => <Card key={it.id} item={it} />)}
         </section>
-
       </div>
 
       {/* 하단 TabBar */}
@@ -209,7 +223,11 @@ export default function ResultsPage() {
             <User size={18} />
             <span>내 정보</span>
           </Link>
-          <Link href="/search" className="lf-tab lf-tab-active" aria-label="검색">
+          <Link
+            href="/search"
+            className="lf-tab lf-tab-active"
+            aria-label="검색"
+          >
             <Search size={18} />
             <span>검색</span>
           </Link>
@@ -223,24 +241,30 @@ export default function ResultsPage() {
 
 function Card({ item }: { item: ResultItem }) {
   const href = `/items/${item.id}`;
-  
+
   // 사진 URL 결정
   const imageUrl = item.thumb_url || item.photos?.[0]?.url;
-  
+
   return (
     <article className="lf-card">
-      <Link href={href} className="lf-cardLink" aria-label={`${item.name} 상세 보기`} />
+      <Link
+        href={href}
+        className="lf-cardLink"
+        aria-label={`${item.name} 상세 보기`}
+      />
       <div className="lf-cardRow">
         <div className="lf-media">
-          {imageUrl
-            ? <img src={imageUrl} alt={item.name} />
-            : <span>No Image</span>}
+          {imageUrl ? (
+            <img src={imageUrl} alt={item.name} />
+          ) : (
+            <span>No Image</span>
+          )}
         </div>
 
         <div className="lf-cardBody">
           <div className="lf-cardHead">
             <h3 className="lf-cardTitle">{item.name}</h3>
-            {typeof item.score === 'number' && (
+            {typeof item.score === "number" && (
               <span className="lf-score">{Math.round(item.score)}점</span>
             )}
           </div>
@@ -249,7 +273,9 @@ function Card({ item }: { item: ResultItem }) {
             {item.brand && <span className="lf-chip">{item.brand}</span>}
             {item.color && <span className="lf-chip">{item.color}</span>}
             {item.category && <span className="lf-chip">{item.category}</span>}
-            {item.stored_place && <span className="lf-chip">보관: {item.stored_place}</span>}
+            {item.stored_place && (
+              <span className="lf-chip">보관: {item.stored_place}</span>
+            )}
           </div>
 
           {item.reason && (

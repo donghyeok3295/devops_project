@@ -2,7 +2,7 @@
 
 from .vector_similarity import *
 from .rule_score import calculate_rule_score
-from .llm_score import get_llm_score
+from .services.llm import score as get_llm_score_result
 import math
 
 def calculate_distance(lat1, lon1, lat2, lon2):
@@ -40,7 +40,11 @@ def compute_similarity(user, item):
 def match_item(user_input, candidate):
     sims = compute_similarity(user_input, candidate)
     rule_score = calculate_rule_score(sims)
-    llm_score, reason = get_llm_score(user_input, candidate, sims)
+
+    # 새로운 LLM 점수 계산 함수 호출 (rule_score 전달)
+    llm_result = get_llm_score_result(user_input, candidate, rule_score)
+    llm_score = llm_result.get("llm_score", 0.0)
+    reason = llm_result.get("reason", "no-reason")
 
     final_score = round((rule_score + llm_score) / 2, 4)
 

@@ -125,6 +125,8 @@ export default function ResultsPage() {
     return arr;
   }, [items, sort]);
 
+  const top = useMemo(() => sorted.slice(0, 5), [sorted]);
+
   const isEmpty = !loading && !error && sorted.length === 0;
 
   // URL 동기화(선택)
@@ -200,7 +202,7 @@ export default function ResultsPage() {
 
           {!loading &&
             !error &&
-            sorted.map((it) => <Card key={it.id} item={it} />)}
+            top.map((it) => <Card key={it.id} item={it} />)}
         </section>
       </div>
 
@@ -244,6 +246,11 @@ function Card({ item }: { item: ResultItem }) {
 
   // 사진 URL 결정
   const imageUrl = item.thumb_url || item.photos?.[0]?.url;
+  const numericScore = typeof item.score === "number" ? item.score : Number(item.score ?? NaN);
+  const hasScore = Number.isFinite(numericScore);
+  const displayScore = hasScore
+    ? Math.round((numericScore <= 1 ? numericScore * 100 : numericScore))
+    : null;
 
   return (
     <article className="lf-card">
@@ -264,8 +271,8 @@ function Card({ item }: { item: ResultItem }) {
         <div className="lf-cardBody">
           <div className="lf-cardHead">
             <h3 className="lf-cardTitle">{item.name}</h3>
-            {typeof item.score === "number" && (
-              <span className="lf-score">{Math.round(item.score)}점</span>
+            {hasScore && (
+              <span className="lf-score">유사도 {displayScore}%</span>
             )}
           </div>
 

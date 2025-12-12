@@ -299,7 +299,7 @@ export default function ItemNewPage() {
 
       {/* 보관 위치 */}
       <section className="section lf-card p-5">
-        <h2 className="mb-3 font-semibold">보관 위치</h2>
+        <h2 className="mb-3 font-semibold">분실물 습득 위치</h2>
         <div className="location-actions">
           <button type="button" onClick={geolocate} className="location-bar w-full">
             <MapPin className="h-4 w-4" />

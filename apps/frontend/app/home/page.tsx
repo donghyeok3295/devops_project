@@ -333,14 +333,13 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* 실시간 현황 4스탯 */}
+        {/* 실시간 현황 3스탯 */}
         <section aria-labelledby="live-stats">
           <h2 id="live-stats" className="lf-section-title">실시간 현황</h2>
-          <div className="lf-grid-4">
+          <div className="lf-grid-3">
             <StatBox label="전체 등록" value={stats.total} />
             <StatBox label="보관 중" value={stats.stored} />
             <StatBox label="반환 완료" value={stats.handed_over} />
-            <StatBox label="온라인" value={stats.online} />
           </div>
         </section>
 

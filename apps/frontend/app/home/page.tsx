@@ -128,9 +128,13 @@ function HeroTopNav() {
 
 
 export default function HomePage() {
+  const router = useRouter()
   const [greetingName] = useState<string>('마음씨 고운 습득자님')
   const [mode] = useState<'finder' | 'seeker'>('finder')
   const [unreadCount, setUnreadCount] = useState<number>(0)
+  const [pendingReturns, setPendingReturns] = useState<number>(0)
+  const [pendingDelta, setPendingDelta] = useState<number>(0)
+  const [showPendingAlert, setShowPendingAlert] = useState<boolean>(false)
   const [stats, setStats] = useState<Stats>({ total: 0, stored: 0, handed_over: 0, online: 0 })
   const [activities, setActivities] = useState<ActivityItem[]>([])
 
@@ -174,6 +178,39 @@ export default function HomePage() {
             }
           } catch (e) {
             console.error('Failed to fetch my stats:', e)
+          }
+
+          // 미처리 반환 요청 카운트 (등록자용)
+          try {
+            const pendingRes = await fetch(`${API_BASE}/me/return-requests/pending-count`, {
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              credentials: 'include',
+              cache: 'no-store',
+            })
+            if (pendingRes.ok) {
+              const data = await pendingRes.json()
+              const count = Number(data?.count || 0)
+              if (mounted) {
+                setPendingReturns(count)
+                // 읽음 처리 비교: delta 계산
+                try {
+                  const key = `lf_lastSeen_returnRequests_${(token || '').slice(0, 8) || 'anon'}`
+                  const lastSeenRaw = Number(localStorage.getItem(key) || 0)
+                  const lastSeen = Math.min(lastSeenRaw, count) // 감소 시 보정
+                  const delta = Math.max(0, count - lastSeen)
+                  setPendingDelta(delta)
+                  setShowPendingAlert(delta > 0)
+                } catch {
+                  setPendingDelta(count)
+                  setShowPendingAlert(count > 0)
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Failed to fetch pending return requests:', e)
           }
         }
         
@@ -310,6 +347,49 @@ export default function HomePage() {
 
       {/* ====== BODY ====== */}
       <main className="lf-container space-y-8" style={{ marginTop: '-60px' }}>
+        {showPendingAlert && pendingDelta > 0 && (
+          <section aria-label="반환 요청 알림">
+            <div
+              className="lf-card"
+              style={{
+                background: '#eef2ff',
+                border: '1px solid #c7d2fe',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 16,
+                padding: '16px 18px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>알림</div>
+                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>
+                  새 반환 요청이 {pendingDelta}건 있습니다.
+                </div>
+                <div style={{ fontSize: 13, opacity: 0.8 }}>
+                  등록한 분실물에 대한 요청을 확인해 주세요.
+                </div>
+              </div>
+              <button
+                className="lf-hero-login"
+                style={{ minWidth: 120 }}
+                onClick={() => {
+                  try {
+                    const token = localStorage.getItem('lf_token') || ''
+                    const key = `lf_lastSeen_returnRequests_${(token || '').slice(0, 8) || 'anon'}`
+                    localStorage.setItem(key, String(pendingReturns))
+                  } catch {}
+                  setShowPendingAlert(false)
+                  router.push('/me/activity')
+                }}
+                aria-label="반환 요청 확인하기"
+              >
+                확인하기
+              </button>
+            </div>
+          </section>
+        )}
         {/* 빠른 작업 2카드 */}
         <section aria-labelledby="quick-actions">
           <h2 id="quick-actions" className="sr-only">빠른 작업</h2>

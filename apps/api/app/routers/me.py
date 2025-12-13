@@ -5,7 +5,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from ..db import get_db
-from ..models import Item, User, ItemStatus
+from ..models import Item, User, ItemStatus, Claim, ClaimStatus
 from ..security import get_current_user
 
 router = APIRouter(prefix="/me", tags=["me"])
@@ -138,6 +138,46 @@ def get_my_activities(
     
     return activities[:limit] if len(activities) > limit else activities
 
+@router.get("/return-requests/pending-count")
+def pending_return_requests_count(
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    count = (
+        db.query(Claim)
+        .join(Item, Claim.item_id == Item.id)
+        .filter(Item.finder_id == int(user_id), Claim.status == ClaimStatus.PENDING)
+        .count()
+    )
+    return {"count": count}
+
+@router.get("/return-requests")
+def incoming_return_requests(
+    status: ClaimStatus = Query(ClaimStatus.PENDING),
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    claims = (
+        db.query(Claim)
+        .join(Item, Claim.item_id == Item.id)
+        .filter(Item.finder_id == int(user_id))
+        .filter(Claim.status == status)
+        .order_by(Claim.created_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": c.id,
+            "item_id": c.item_id,
+            "item_name": c.item.name if c.item else None,
+            "seeker_id": c.seeker_id,
+            "memo": c.memo,
+            "status": c.status,
+            "created_at": c.created_at,
+        }
+        for c in claims
+    ]
+
 @router.get("/profile")
 def get_my_profile(
     db: Session = Depends(get_db),
@@ -154,4 +194,3 @@ def get_my_profile(
         "role": user.role,
         "created_at": user.created_at.isoformat() if user.created_at else None,
     }
-

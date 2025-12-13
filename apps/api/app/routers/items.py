@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 
 from ..db import get_db
-from ..models import Item, ItemPhoto, ItemStatus, MatchLog
+from ..models import Item, ItemPhoto, ItemStatus, MatchLog, Claim, ClaimStatus
 from ..security import get_current_user_optional, get_current_user
 
 router = APIRouter(prefix="/items", tags=["items"])
@@ -343,3 +343,45 @@ def patch_item(
         return {"id": item.id, "status": item.status}
     
     return {"id": item.id}
+
+# 반환 요청 생성 (분실자용)
+class ReturnRequestIn(BaseModel):
+    memo: Optional[str] = None
+
+@router.post("/{item_id}/return-requests")
+def create_return_request(
+    item_id: int,
+    payload: ReturnRequestIn,
+    db: Session = Depends(get_db),
+    user_id: str = Depends(get_current_user),
+):
+    item = db.get(Item, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if item.finder_id == int(user_id):
+        raise HTTPException(status_code=400, detail="Owner cannot create return request")
+    if item.status == ItemStatus.HANDED_OVER:
+        raise HTTPException(status_code=400, detail="Item already handed over")
+
+    existing = (
+        db.query(Claim)
+        .filter(
+            Claim.item_id == item.id,
+            Claim.seeker_id == int(user_id),
+            Claim.status == ClaimStatus.PENDING,
+        )
+        .first()
+    )
+    if existing:
+        return {"id": existing.id, "status": existing.status}
+
+    claim = Claim(
+        item_id=item.id,
+        seeker_id=int(user_id),
+        memo=payload.memo,
+        status=ClaimStatus.PENDING,
+    )
+    db.add(claim)
+    db.commit()
+    db.refresh(claim)
+    return {"id": claim.id, "status": claim.status}

@@ -51,7 +51,16 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers,
     credentials: 'include',
   })
-  if (!res.ok) throw new Error(await res.text())
+  if (!res.ok) {
+    // 401이면 저장된 토큰을 지우고 재로그인을 유도
+    if (res.status === 401 && typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('lf_token')
+        sessionStorage.removeItem('lf_token')
+      } catch {}
+    }
+    throw new Error(await res.text())
+  }
   return res.json() as Promise<T>
 }
 

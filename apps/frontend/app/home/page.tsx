@@ -101,7 +101,7 @@ function HeroTopNav() {
 
   return (
     <div className="lf-hero-nav">
-      <Link href="/" className="lf-hero-brand" aria-label="홈으로">
+      <Link href="/home" className="lf-hero-brand" aria-label="홈으로">
         🔍 Smart Lost & Found
       </Link>
 
@@ -333,14 +333,13 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* 실시간 현황 4스탯 */}
+        {/* 실시간 현황 3스탯 */}
         <section aria-labelledby="live-stats">
           <h2 id="live-stats" className="lf-section-title">실시간 현황</h2>
-          <div className="lf-grid-4">
+          <div className="lf-grid-3">
             <StatBox label="전체 등록" value={stats.total} />
             <StatBox label="보관 중" value={stats.stored} />
             <StatBox label="반환 완료" value={stats.handed_over} />
-            <StatBox label="온라인" value={stats.online} />
           </div>
         </section>
 
@@ -371,7 +370,7 @@ export default function HomePage() {
       {/* 하단 탭바 */}
       <nav className="lf-tabbar" aria-label="하단 탭바">
         <div className="lf-tabbar-inner">
-          <Link href="/" className="lf-tab lf-tab-active" aria-label="홈">
+          <Link href="/home" className="lf-tab lf-tab-active" aria-label="홈">
             <Home size={18} />
             <span>홈</span>
           </Link>
@@ -412,4 +411,3 @@ function ActivityIcon({ kind }: { kind?: ActivityItem['icon'] }) {
   if (kind === 'new') return <PackageSearch className={cls} />
   return <LayoutDashboard className={cls} />
 }
-

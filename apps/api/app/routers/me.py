@@ -1,14 +1,17 @@
 # apps/api/app/routers/me.py
+
+from datetime import datetime
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
-from datetime import datetime
 
 from ..db import get_db
 from ..models import Item, User, ItemStatus, Claim, ClaimStatus
 from ..security import get_current_user
 
 router = APIRouter(prefix="/me", tags=["me"])
+
 
 @router.get("/items")
 def get_my_items(
@@ -20,13 +23,13 @@ def get_my_items(
 ):
     """내가 등록한 분실물 목록"""
     q = db.query(Item).filter(Item.finder_id == int(user_id))
-    
+
     if status:
         q = q.filter(Item.status == status)
-    
+
     total = q.count()
     items = q.order_by(Item.created_at.desc()).offset((page - 1) * size).limit(size).all()
-    
+
     return {
         "items": [
             {
@@ -48,8 +51,9 @@ def get_my_items(
             "page": page,
             "size": size,
             "total": total,
-        }
+        },
     }
+
 
 @router.get("/stats")
 def get_my_stats(
@@ -58,17 +62,17 @@ def get_my_stats(
 ):
     """내 통계"""
     user_id_int = int(user_id)
-    
+
     total = db.query(Item).filter(Item.finder_id == user_id_int).count()
     stored = db.query(Item).filter(
         Item.finder_id == user_id_int,
-        Item.status == ItemStatus.STORED
+        Item.status == ItemStatus.STORED,
     ).count()
     handed_over = db.query(Item).filter(
         Item.finder_id == user_id_int,
-        Item.status == ItemStatus.HANDED_OVER
+        Item.status == ItemStatus.HANDED_OVER,
     ).count()
-    
+
     return {
         "total": total,
         "stored": stored,
@@ -76,19 +80,24 @@ def get_my_stats(
         "online": 0,
     }
 
+
 @router.get("/activities")
 def get_my_activities(
     db: Session = Depends(get_db),
     limit: int = Query(100, ge=1, le=500),
     user_id: str = Depends(get_current_user),
 ):
-    """내 활동 목록"""
+    """내 활동 목록 (RETURNED/CREATED 포함, created_at ISO 문자열 포함)"""
     user_id_int = int(user_id)
-    
-    items = db.query(Item).filter(
-        Item.finder_id == user_id_int
-    ).order_by(Item.created_at.desc()).limit(limit).all()
-    
+
+    items = (
+        db.query(Item)
+        .filter(Item.finder_id == user_id_int)
+        .order_by(Item.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
     def _time_ago(dt: datetime) -> str:
         if not dt:
             return "알 수 없음"
@@ -101,42 +110,41 @@ def get_my_activities(
             return f"{int(s // 3600)}시간 전"
         else:
             return f"{int(s // 86400)}일 전"
-    
+
     activities = []
     for item in items:
-        # 반환 완료된 경우에는 반환 기록만 추가
+        base = {
+            "item_id": item.id,
+            "title": item.name,
+            "created_at": item.created_at.isoformat() if item.created_at else None,
+            "ago": _time_ago(item.created_at),
+        }
         if item.status == ItemStatus.HANDED_OVER:
-            activities.append({
-                "id": f"return_{item.id}",
-                "type": "RETURNED",
-                "title": f"{item.name} 분실물 반환",
-                "desc": f"{item.name} — 반환 완료",
-                "ago": _time_ago(item.created_at),
-                "badge": "DONE",
-                "icon": "CHECK",
-                "created_at": item.created_at  # 정렬용
-            })
+            activities.append(
+                {
+                    **base,
+                    "id": f"return_{item.id}",
+                    "type": "RETURNED",
+                    "desc": f"{item.name} - 반환 완료",
+                    "badge": "DONE",
+                    "icon": "CHECK",
+                }
+            )
         else:
-            # 보관 중인 경우에는 등록 기록만 추가
-            activities.append({
-                "id": f"register_{item.id}",
-                "type": "CREATED",
-                "title": f"{item.name} 분실물 등록",
-                "desc": f"{item.name} — {item.status}",
-                "ago": _time_ago(item.created_at),
-                "badge": "ONGOING",
-                "icon": "CLOCK",
-                "created_at": item.created_at  # 정렬용
-            })
-    
-    # 시간 순으로 정렬 (최신순) - created_at 필드 기준
-    activities.sort(key=lambda x: x.get("created_at") or datetime.min, reverse=True)
-    
-    # created_at 필드 제거 후 반환
-    for act in activities:
-        act.pop("created_at", None)
-    
+            activities.append(
+                {
+                    **base,
+                    "id": f"register_{item.id}",
+                    "type": "CREATED",
+                    "desc": f"{item.name} - {item.status}",
+                    "badge": "ONGOING",
+                    "icon": "CLOCK",
+                }
+            )
+
+    activities.sort(key=lambda x: x.get("created_at") or "", reverse=True)
     return activities[:limit] if len(activities) > limit else activities
+
 
 @router.get("/return-requests/pending-count")
 def pending_return_requests_count(
@@ -150,6 +158,7 @@ def pending_return_requests_count(
         .count()
     )
     return {"count": count}
+
 
 @router.get("/return-requests")
 def incoming_return_requests(
@@ -173,22 +182,24 @@ def incoming_return_requests(
             "seeker_id": c.seeker_id,
             "memo": c.memo,
             "status": c.status,
-            "created_at": c.created_at,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
         }
         for c in claims
     ]
+
 
 @router.get("/profile")
 def get_my_profile(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
-    """내 프로필"""
+    """내 프로필 (id 포함)"""
     user = db.get(User, int(user_id))
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return {
+        "id": user.id,
         "email": user.email,
         "phone": user.phone,
         "role": user.role,

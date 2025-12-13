@@ -1,7 +1,6 @@
-// apps/frontend/app/items/[id]/page.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Home, PlusCircle, Bell, User, Search, CheckCircle } from "lucide-react";
@@ -28,12 +27,11 @@ type ItemDetail = {
   description?: string;
 };
 
-export default function ItemDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default function ItemDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const [item, setItem] = useState<ItemDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState<string | null>(null);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<any>(null);
 
@@ -112,7 +110,7 @@ export default function ItemDetailPage({ params }: { params: { id: string } }) {
   }, [item]);
 
   const handleHandOver = async () => {
-    if (!confirm("반환 처리하시겠습니까?")) return;
+    if (!confirm("이 분실물을 반환 완료로 표시할까요?")) return;
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("lf_token") : null;
       const res = await fetch(`${API_BASE}/items/${id}/status?new_status=HANDED_OVER`, {
@@ -124,34 +122,14 @@ export default function ItemDetailPage({ params }: { params: { id: string } }) {
         body: JSON.stringify({}),
       });
       if (res.ok && item) {
-        alert("반환 처리되었습니다.");
+        alert("반환 완료로 표시되었습니다.");
         setItem({ ...item, status: "HANDED_OVER" });
+      } else {
+        const txt = await res.text();
+        alert(txt || "반환 처리에 실패했습니다.");
       }
     } catch (e) {
       alert("처리 중 오류가 발생했습니다.");
-    }
-  };
-
-  const handleRequestReturn = async () => {
-    if (!confirm("등록자에게 반환 요청을 보내시겠습니까?")) return;
-    try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("lf_token") : null;
-      const res = await fetch(`${API_BASE}/items/${item?.id}/return-requests`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({}),
-      });
-      if (res.ok) {
-        setMessage("반환 요청이 전송되었습니다.");
-      } else {
-        const text = await res.text();
-        alert(text || "반환 요청 실패");
-      }
-    } catch (e) {
-      alert("반환 요청 중 오류가 발생했습니다.");
     }
   };
 
@@ -169,6 +147,9 @@ export default function ItemDetailPage({ params }: { params: { id: string } }) {
       if (res.ok) {
         alert("삭제되었습니다.");
         router.replace("/me/items");
+      } else {
+        const txt = await res.text();
+        alert(txt || "삭제에 실패했습니다.");
       }
     } catch {
       alert("삭제 중 오류가 발생했습니다.");
@@ -251,74 +232,40 @@ export default function ItemDetailPage({ params }: { params: { id: string } }) {
         </div>
 
         <div className="lf-card" style={{ marginTop: "16px" }}>
-          {item.is_owner ? (
-            <>
-              {(item.status === "STORED" || item.status === "CLAIMED") && (
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button
-                    onClick={handleHandOver}
-                    className="lf-btn-primary-full"
-                    style={{
-                      flex: 1,
-                      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                      boxShadow: "0 4px 15px rgba(102, 126, 234, 0.4)",
-                      transition: "all 0.3s ease",
-                    }}
-                  >
-                    <CheckCircle size={18} /> 반환 처리
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    className="lf-btn-primary-full"
-                    style={{
-                      flex: 1,
-                      background: "linear-gradient(135deg, #f44336 0%, #e91e63 100%)",
-                      boxShadow: "0 4px 15px rgba(244, 67, 54, 0.4)",
-                      transition: "all 0.3s ease",
-                    }}
-                  >
-                    삭제
-                  </button>
-                </div>
+          {(item.status === "STORED" || item.status === "CLAIMED") && (
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+              <button
+                onClick={handleHandOver}
+                className="lf-btn-primary-full"
+                style={{
+                  flex: 1,
+                  background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                  boxShadow: "0 4px 15px rgba(102, 126, 234, 0.4)",
+                  transition: "all 0.3s ease",
+                }}
+              >
+                <CheckCircle size={18} /> 반환 완료로 표시
+              </button>
+              {item.is_owner && (
+                <button
+                  onClick={handleDelete}
+                  className="lf-btn-primary-full"
+                  style={{
+                    flex: 1,
+                    background: "linear-gradient(135deg, #f44336 0%, #e91e63 100%)",
+                    boxShadow: "0 4px 15px rgba(244, 67, 54, 0.4)",
+                    transition: "all 0.3s ease",
+                  }}
+                >
+                  삭제
+                </button>
               )}
-              {item.status === "HANDED_OVER" && (
-                <p style={{ color: "#4caf50", fontSize: "16px", fontWeight: "bold", textAlign: "center" }}>
-                  이미 반환 완료된 물건입니다.
-                </p>
-              )}
-            </>
-          ) : (
-            <>
-              {item.status === "STORED" && (
-                <>
-                  <p style={{ marginBottom: "12px", color: "#666", fontSize: "14px" }}>
-                    본인 물건이라면 등록자에게 반환 요청을 보내세요.
-                  </p>
-                  <button
-                    onClick={handleRequestReturn}
-                    className="lf-btn-primary-full"
-                    style={{
-                      background: "linear-gradient(135deg, #4caf50 0%, #45a049 100%)",
-                      boxShadow: "0 4px 15px rgba(76, 175, 80, 0.4)",
-                      transition: "all 0.3s ease",
-                    }}
-                  >
-                    반환 요청 보내기
-                  </button>
-                  {message && <p style={{ marginTop: 8, color: "#16a34a" }}>{message}</p>}
-                </>
-              )}
-              {item.status === "CLAIMED" && (
-                <p style={{ color: "#ff9800", fontSize: "16px", fontWeight: "bold", textAlign: "center" }}>
-                  반환 요청이 처리 중입니다.
-                </p>
-              )}
-              {item.status === "HANDED_OVER" && (
-                <p style={{ color: "#666", fontSize: "16px", fontWeight: "bold", textAlign: "center" }}>
-                  이미 반환 완료된 물건입니다.
-                </p>
-              )}
-            </>
+            </div>
+          )}
+          {item.status === "HANDED_OVER" && (
+            <p style={{ color: "#4caf50", fontSize: "16px", fontWeight: "bold", textAlign: "center" }}>
+              이미 반환 완료된 물건입니다.
+            </p>
           )}
         </div>
       </section>

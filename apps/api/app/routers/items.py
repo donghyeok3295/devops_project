@@ -1,4 +1,4 @@
-# apps/api/app/routers/items.py
+﻿# apps/api/app/routers/items.py
 from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
@@ -43,7 +43,7 @@ class ItemOut(BaseModel):
 
 # ---------- Helpers ----------
 ALLOWED_TRANSITIONS = {
-    ItemStatus.STORED: {ItemStatus.CLAIMED},
+    ItemStatus.STORED: {ItemStatus.CLAIMED, ItemStatus.HANDED_OVER},
     ItemStatus.CLAIMED: {ItemStatus.HANDED_OVER, ItemStatus.STORED},
     ItemStatus.HANDED_OVER: set(),
 }
@@ -84,7 +84,12 @@ def create_item(
     for p in payload.photos:
         db.add(ItemPhoto(item_id=item.id, url=p.url, exif_json=p.exif_json))
 
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="상태 변경 중 오류가 발생했습니다")
+
     return {"id": item.id, "status": item.status}
 
 # 목록(로그인 필수)
@@ -287,19 +292,35 @@ def get_item(
 @router.patch("/{item_id}/status")
 def update_status(
     item_id: int,
-    new_status: ItemStatus,
+    new_status: str = Query(..., description="변경할 상태 (예: HANDED_OVER)"),
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
+    """
+    분실물 상태 변경 (로그인 사용자 누구나)
+    MATCH_LOGS에는 기록하지 않음
+    """
+    try:
+        target_status = ItemStatus(new_status)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"지원하지 않는 상태 값: {new_status}")
+
     item = db.get(Item, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-    if item.finder_id != int(user_id):
-        raise HTTPException(status_code=403, detail="Not your item")
 
-    ensure_transition(item.status, new_status)
-    item.status = new_status
-    db.commit()
+    if item.status == ItemStatus.HANDED_OVER and target_status == ItemStatus.HANDED_OVER:
+        raise HTTPException(status_code=409, detail="이미 반환 완료된 분실물입니다")
+
+    ensure_transition(item.status, target_status)
+    item.status = target_status
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="상태 변경 중 오류가 발생했습니다")
+
     return {"id": item.id, "status": item.status}
 
 # DELETE 엔드포인트
@@ -334,7 +355,9 @@ def patch_item(
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     if item.finder_id != int(user_id):
-        raise HTTPException(status_code=403, detail="Not your item")
+        # 단, 반환 완료(HANDED_OVER)로 변경만 허용
+        if not ("status" in payload and payload.get("status") == ItemStatus.HANDED_OVER):
+            raise HTTPException(status_code=403, detail="Not your item")
     
     # status 필드만 업데이트
     if "status" in payload:
@@ -385,3 +408,4 @@ def create_return_request(
     db.commit()
     db.refresh(claim)
     return {"id": claim.id, "status": claim.status}
+

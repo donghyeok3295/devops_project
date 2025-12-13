@@ -253,10 +253,15 @@ def get_item(
     db: Session = Depends(get_db),
     user_id: str = Depends(get_current_user),
 ):
+    from ..models import User
     item = db.get(Item, item_id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     photos = db.query(ItemPhoto).filter(ItemPhoto.item_id == item.id).all()
+
+    # 현재 사용자가 등록자인지 확인
+    is_owner = item.finder_id == int(user_id)
+
     return {
         "id": item.id,
         "name": item.name,
@@ -275,6 +280,7 @@ def get_item(
         "status": item.status,
         "created_at": item.created_at,
         "photos": [{"id": p.id, "url": p.url} for p in photos],
+        "is_owner": is_owner,  # 등록자 여부 추가
     }
 
 # 상태 변경(로그인 필수)

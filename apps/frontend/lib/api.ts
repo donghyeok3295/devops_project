@@ -109,3 +109,28 @@ export async function createItem(body: any) {
   if (!res.ok) throw new Error(await res.text())
   return res.json() as Promise<{ id: number; status: string }>
 }
+
+/** 반환 요청 생성 (SEEKER) */
+export async function createClaim(itemId: number, memo?: string) {
+  return api<{ id: number; status: string; message: string }>('/claims/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId, memo }),
+  })
+}
+
+/** 아이템 삭제 (FINDER - 소유자만) */
+export async function deleteItem(itemId: number) {
+  return api<{ ok: boolean }>(`/items/${itemId}`, {
+    method: 'DELETE',
+  })
+}
+
+/** 아이템 상태 변경 (FINDER - 소유자만) */
+export async function updateItemStatus(itemId: number, status: string) {
+  return api<{ id: number; status: string }>(`/items/${itemId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  })
+}

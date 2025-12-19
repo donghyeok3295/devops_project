@@ -65,9 +65,6 @@ class User(Base):
     claims: Mapped[list["Claim"]] = relationship(
         back_populates="seeker", cascade="all, delete-orphan", foreign_keys="Claim.seeker_id"
     )
-    notifications: Mapped[list["Notification"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
 
     __table_args__ = (
         UniqueConstraint("email", name="uq_USERS_email"),
@@ -167,43 +164,27 @@ class Claim(Base):
 
 
 # ========================
-#     NOTIFICATIONS
-# ========================
-class Notification(Base):
-    __tablename__ = "NOTIFICATIONS"
-
-    id: Mapped[int] = mapped_column(Identity(start=1, always=True), primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("USERS.id"), nullable=False)
-    type: Mapped[str] = mapped_column(String(40), nullable=False)     # e.g., "CLAIM_UPDATED"
-    payload_json: Mapped[str | None] = mapped_column(Text)
-    is_read: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # Oracle 호환 위해 Integer(0/1)
-    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
-    read_at: Mapped[DateTime | None] = mapped_column(DateTime)
-
-    user: Mapped["User"] = relationship(back_populates="notifications")
-
-    __table_args__ = (
-        Index("ix_NOTIFICATIONS_user_id_is_read", "user_id", "is_read"),
-    )
-
-
-# ========================
 #      MATCH_LOGS
 # ========================
 class MatchLog(Base):
     """
-    검색/매칭 추적용 로그 (규칙 점수 저장; AI 재랭킹 전/후 비교용)
+    AI 검색/매칭 로그
+    - 사용자가 어떤 검색어로 검색했는지 기록
+    - AI가 매긴 점수 저장
+    - 성능 분석 및 개선에 사용
     """
     __tablename__ = "MATCH_LOGS"
 
     id: Mapped[int] = mapped_column(Identity(start=1, always=True), primary_key=True)
-    seeker_id: Mapped[int] = mapped_column(ForeignKey("USERS.id"), nullable=False)
-    query_text: Mapped[str] = mapped_column(String(500), nullable=False)
-    item_id: Mapped[int | None] = mapped_column(ForeignKey("ITEMS.id"))  # 후보 아이템
-    rule_score: Mapped[float | None] = mapped_column(Float)               # 규칙 점수(카테고리/브랜드/색/위치/시간 등 가중합)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("USERS.id"))  # 비로그인도 가능
+    query_text: Mapped[str] = mapped_column(String(500), nullable=False)  # "검은색 아이폰 도서관에서 잃어버림"
+    item_id: Mapped[int | None] = mapped_column(ForeignKey("ITEMS.id"))  # 매칭된 아이템
+    ai_score: Mapped[float | None] = mapped_column(Float)  # AI가 산출한 유사도 점수 (0-100)
+    ai_reason: Mapped[str | None] = mapped_column(Text)    # AI가 설명한 매칭 이유
     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
 
     __table_args__ = (
-        Index("ix_MATCH_LOGS_seeker_created", "seeker_id", "created_at"),
+        Index("ix_MATCH_LOGS_user_created", "user_id", "created_at"),
         Index("ix_MATCH_LOGS_item_id", "item_id"),
+        Index("ix_MATCH_LOGS_created_at", "created_at"),  # 최근 검색 조회용
     )

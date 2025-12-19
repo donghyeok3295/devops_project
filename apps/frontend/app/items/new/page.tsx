@@ -1,9 +1,9 @@
-'use client'
+"use client"
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Camera, Image as ImageIcon, MapPin, Tag, PackagePlus } from 'lucide-react'
+import { Camera, Image as ImageIcon, MapPin, Tag, PackagePlus, Home, Bell, User, Search } from 'lucide-react'
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import exifr from 'exifr'
@@ -90,7 +90,7 @@ function Pills({
   options, value, onChange, max = Infinity, disabled = false,
 }: { options: string[]; value: string[]; onChange: (v: string[]) => void; max?: number; disabled?: boolean }) {
   return (
-    <div className="pills flex flex-wrap gap-2">
+    <div className="pills">
       {options.map((opt) => {
         const active = value.includes(opt)
         return (
@@ -103,9 +103,7 @@ function Pills({
               if (active) onChange(value.filter((v) => v !== opt))
               else if (value.length < max) onChange([...value, opt])
             }}
-            className={`pill rounded-full border px-3 py-2 text-sm
-              ${active ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-700'}
-              ${disabled ? 'opacity-60 cursor-not-allowed' : 'hover:bg-slate-50'}`}
+            className={`pill ${active ? 'is-active' : ''}`}
           >
             {opt}
           </button>
@@ -237,11 +235,18 @@ export default function ItemNewPage() {
   ])
 
   return (
-    // ⬇️ 하단 CTA에 가리지 않도록 여유를 크게(padding-bottom 11rem)
-    <div className="lf-new lf-container py-8 pb-44 md:pb-48">
-      <Link href="/" className="text-sm text-slate-500 hover:text-slate-700">← 홈</Link>
-      <h1 className="mt-2 text-2xl font-bold">분실물 등록</h1>
-      <p className="mt-1 text-sm text-slate-500">사진과 상세 정보를 입력해주세요</p>
+    <div className="lf-page lf-new">
+      {/* 상단 Hero */}
+      <section className="lf-hero">
+        <div className="lf-container">
+          <p className="lf-hero-sub">분실물 등록</p>
+          <h1 className="lf-hero-title">분실물 등록</h1>
+          <p className="lf-hero-desc">사진과 상세 정보를 입력해주세요</p>
+        </div>
+      </section>
+
+      {/* Body */}
+      <div className="lf-container" style={{ paddingTop: '20px', paddingBottom: '120px' }}>
 
       {!authed && (
         <div
@@ -294,7 +299,7 @@ export default function ItemNewPage() {
 
       {/* 보관 위치 */}
       <section className="section lf-card p-5">
-        <h2 className="mb-3 font-semibold">보관 위치</h2>
+        <h2 className="mb-3 font-semibold">분실물 습득 위치</h2>
         <div className="location-actions">
           <button type="button" onClick={geolocate} className="location-bar w-full">
             <MapPin className="h-4 w-4" />
@@ -353,21 +358,45 @@ export default function ItemNewPage() {
         </div>
       </section>
 
-      {/* ⬇️ CTA에 가리지 않게 안전 스페이서(인라인 높이로 CSS 추가 불필요) */}
-      <div style={{ height: '92px' }} aria-hidden />
+      </div>
 
-      {/* 제출 */}
-      <div className="cta-wrap fixed bottom-0 left-0 right-0 z-10 px-4 pb-3 pt-2"
-           style={{ background: 'linear-gradient(180deg, rgba(246,248,251,0) 0%, rgba(246,248,251,1) 40%)' }}>
+      {/* 제출 버튼 - 하단 탭바 위 고정 */}
+      <div className="lf-fixed-cta">
         <button
           type="button"
           onClick={onSubmit}
           disabled={!canSubmit}
-          className="cta flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 font-bold text-white shadow-lg shadow-blue-400/30 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="lf-btn-primary-full"
         >
-          <PackagePlus className="h-5 w-5" /> 분실물 등록하기
+          <PackagePlus size={18} /> 분실물 등록하기
         </button>
       </div>
+
+      {/* 하단 TabBar */}
+      <nav className="lf-tabbar" aria-label="하단 탭바">
+        <div className="lf-tabbar-inner">
+          <Link href="/home" className="lf-tab" aria-label="홈">
+            <Home size={18} />
+            <span>홈</span>
+          </Link>
+          <Link href="/items/new" className="lf-tab lf-tab-active" aria-label="등록">
+            <PackagePlus size={18} />
+            <span>등록</span>
+          </Link>
+          <Link href="/me/activity" className="lf-tab" aria-label="내 활동">
+            <Bell size={18} />
+            <span>내 활동</span>
+          </Link>
+          <Link href="/me/profile" className="lf-tab" aria-label="내 정보">
+            <User size={18} />
+            <span>내 정보</span>
+          </Link>
+          <Link href="/search" className="lf-tab" aria-label="검색">
+            <Search size={18} />
+            <span>검색</span>
+          </Link>
+        </div>
+      </nav>
     </div>
   )
 }

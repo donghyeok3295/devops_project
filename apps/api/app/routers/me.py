@@ -97,6 +97,14 @@ def get_my_activities(
         .limit(limit)
         .all()
     )
+    claims = (
+        db.query(Claim, Item)
+        .join(Item, Claim.item_id == Item.id)
+        .filter(Claim.seeker_id == user_id_int)
+        .order_by(Claim.created_at.desc())
+        .limit(limit)
+        .all()
+    )
 
     def _time_ago(dt: datetime) -> str:
         if not dt:
@@ -139,6 +147,46 @@ def get_my_activities(
                     "desc": f"{item.name} - {item.status}",
                     "badge": "ONGOING",
                     "icon": "CLOCK",
+                }
+            )
+
+    # 반환 요청/승인/거절 (분실자 입장)
+    for claim, item in claims:
+        base = {
+            "id": f"claim_{claim.id}",
+            "item_id": item.id,
+            "title": item.name,
+            "created_at": claim.created_at.isoformat() if claim.created_at else None,
+            "ago": _time_ago(claim.created_at) if claim.created_at else "알 수 없음",
+        }
+        if claim.status == ClaimStatus.PENDING:
+            activities.append(
+                {
+                    **base,
+                    "type": "CLAIM_SENT",
+                    "desc": f"{item.name} 반환 요청을 보냈습니다.",
+                    "badge": "REQ",
+                    "icon": "CLOCK",
+                }
+            )
+        elif claim.status == ClaimStatus.APPROVED:
+            activities.append(
+                {
+                    **base,
+                    "type": "CLAIM_APPROVED",
+                    "desc": f"{item.name} 반환 요청이 승인되었습니다.",
+                    "badge": "DONE",
+                    "icon": "CHECK",
+                }
+            )
+        elif claim.status == ClaimStatus.REJECTED:
+            activities.append(
+                {
+                    **base,
+                    "type": "CLAIM_REJECTED",
+                    "desc": f"{item.name} 반환 요청이 거절되었습니다.",
+                    "badge": "REJ",
+                    "icon": "ALERT",
                 }
             )
 

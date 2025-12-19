@@ -25,6 +25,7 @@
   inset: auto -20% 0 -20%;
   height: 120px;
   background: radial-gradient(120% 60% at 50% 0%, rgba(255,255,255,0.18), rgba(255,255,255,0) 60%);
+  pointer-events: none;
 }
 
 .lf-hero-sub { opacity: .95; font-size: 12px; }
@@ -1117,4 +1118,3 @@ html, body { height: 100%; }
 .lf-desc-list strong { color: #475569; margin-right: 6px; }
 
 .lf-activity-chip{display:inline-flex;align-items:center;justify-content:center;min-width:44px;padding:2px 8px;margin-right:8px;border-radius:999px;background:#e0e7ff;color:#312e81;font-size:12px;font-weight:700;}
-

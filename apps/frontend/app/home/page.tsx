@@ -125,6 +125,11 @@ export default function HomePage() {
   const [returnedDelta, setReturnedDelta] = useState<number>(0);
   const [showReturnedAlert, setShowReturnedAlert] = useState<boolean>(false);
   const [returnedList, setReturnedList] = useState<ActivityItem[]>([]);
+  const [pendingClaims, setPendingClaims] = useState<number>(0);
+  const [showPendingAlert, setShowPendingAlert] = useState<boolean>(false);
+  const [claimResultDelta, setClaimResultDelta] = useState<number>(0);
+  const [claimResultList, setClaimResultList] = useState<ActivityItem[]>([]);
+  const [showClaimResultAlert, setShowClaimResultAlert] = useState<boolean>(false);
 
   const handleReturnedConfirm = useCallback(() => {
     try {
@@ -183,6 +188,28 @@ export default function HomePage() {
             }
           } catch (e) {
             console.error("Failed to fetch my stats:", e);
+          }
+
+          // 반환 요청 카운트
+          try {
+            const countRes = await fetch(`${API_BASE}/claims/count/?status=PENDING`, {
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              credentials: "include",
+              cache: "no-store",
+            });
+            if (countRes.ok) {
+              const countData = await countRes.json();
+              const c = Number(countData?.count || 0);
+              if (mounted) {
+                setPendingClaims(c);
+                setShowPendingAlert(c > 0);
+              }
+            }
+          } catch (e) {
+            console.error("Failed to fetch pending claims count:", e);
           }
 
           // 활동 (RETURNED 알림 계산)
@@ -248,6 +275,39 @@ export default function HomePage() {
 
                 setReturnedDelta(delta);
                 setShowReturnedAlert(delta > 0);
+
+                // 반환 요청 결과 알림 (분실자)
+                const claimResults = mappedActs
+                  .filter((a) => {
+                    const t = (a.type || "").toUpperCase();
+                    return (t === "CLAIM_APPROVED" || t === "CLAIM_REJECTED") && a.created_at;
+                  })
+                  .sort(
+                    (a, b) =>
+                      new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
+                  );
+                setClaimResultList(claimResults);
+
+                const keyClaim = `lf_lastSeen_claimResult_${userId || token?.slice(0, 8) || "anon"}`;
+                let lastSeenClaim = 0;
+                try {
+                  const raw = localStorage.getItem(keyClaim);
+                  if (raw) lastSeenClaim = new Date(raw).getTime();
+                } catch {}
+
+                const newClaimResults = claimResults.filter(
+                  (a) => new Date(a.created_at as string).getTime() > lastSeenClaim,
+                );
+                const deltaClaim = newClaimResults.length;
+
+                if (deltaClaim === 0 && claimResults[0]?.created_at && lastSeenClaim === 0) {
+                  try {
+                    localStorage.setItem(keyClaim, claimResults[0].created_at as string);
+                  } catch {}
+                }
+
+                setClaimResultDelta(deltaClaim);
+                setShowClaimResultAlert(deltaClaim > 0);
               }
             }
           } catch (e) {
@@ -317,6 +377,83 @@ export default function HomePage() {
       </section>
 
       <main className="lf-container space-y-8" style={{ marginTop: "-60px" }}>
+        {showPendingAlert && pendingClaims > 0 && (
+          <div
+            className="lf-card"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              padding: "16px 18px",
+            }}
+            aria-label="반환 요청 알림"
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 4 }}>알림</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>
+                반환 요청이 {pendingClaims}건 있습니다.
+              </div>
+              <div style={{ fontSize: 13, opacity: 0.8, marginTop: 2 }}>
+                등록한 분실물에 대한 요청을 확인해 주세요.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="lf-btn"
+              onClick={() => {
+                setShowPendingAlert(false);
+                router.push("/claims/inbox");
+              }}
+              aria-label="반환 요청 확인하기"
+            >
+              확인하기
+            </button>
+          </div>
+        )}
+
+        {showClaimResultAlert && claimResultDelta > 0 && (
+          <div
+            className="lf-card"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              padding: "16px 18px",
+            }}
+            aria-label="반환 요청 결과 알림"
+          >
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 4 }}>알림</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>
+                {claimResultDelta === 1
+                  ? `${claimResultList[0]?.title || "분실물"} 요청 결과가 도착했습니다.`
+                  : `반환 요청 결과가 ${claimResultDelta}건 있습니다.`}
+              </div>
+              <div style={{ fontSize: 13, opacity: 0.8, marginTop: 2 }}>
+                승인 또는 거절된 요청 결과를 확인해 주세요.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="lf-btn"
+              onClick={() => {
+                try {
+                  const keyClaim = `lf_lastSeen_claimResult_${userId || "anon"}`;
+                  const latest = claimResultList[0]?.created_at || new Date().toISOString();
+                  localStorage.setItem(keyClaim, latest);
+                } catch {}
+                setShowClaimResultAlert(false);
+                router.push("/me/activity");
+              }}
+              aria-label="반환 요청 결과 확인하기"
+            >
+              확인하기
+            </button>
+          </div>
+        )}
+
         <ReturnedAlertCard
           visible={showReturnedAlert && returnedDelta > 0}
           delta={returnedDelta}

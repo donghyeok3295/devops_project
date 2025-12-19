@@ -109,3 +109,54 @@ export async function createItem(body: any) {
   if (!res.ok) throw new Error(await res.text())
   return res.json() as Promise<{ id: number; status: string }>
 }
+
+/** 반환 요청 생성 (SEEKER) */
+export async function createClaim(itemId: number, memo?: string) {
+  return api<{ id: number; status: string; message: string }>('/claims/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item_id: itemId, memo }),
+  })
+}
+
+/** 아이템 삭제 (FINDER - 소유자만) */
+export async function deleteItem(itemId: number) {
+  return api<{ ok: boolean }>(`/items/${itemId}`, {
+    method: 'DELETE',
+  })
+}
+
+/** 아이템 상태 변경 (FINDER - 소유자만) */
+export async function updateItemStatus(itemId: number, status: string) {
+  return api<{ id: number; status: string }>(`/items/${itemId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  })
+}
+
+// 반환 요청 생성 (비소유자)
+export async function createReturnRequest(itemId: number, memo?: string) {
+  return api<{ id: number; status: string }>(`/items/${itemId}/return-requests`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ memo }),
+  })
+}
+
+// 등록자에게 들어온 반환 요청 목록
+export async function getIncomingReturnRequests(status: string = 'PENDING') {
+  return api<any[]>(`/me/return-requests?status=${status}`)
+}
+
+// 등록자 반환 요청 승인/거절
+export async function decideReturnRequest(id: number, status: 'APPROVED' | 'REJECTED') {
+  return api<{ id: number; status: string }>(`/claims/${id}?status=${status}`, {
+    method: 'PATCH',
+  })
+}
+
+// 미처리 반환 요청 개수 (홈 알림용)
+export async function getPendingReturnRequestCount() {
+  return api<{ count: number }>('/me/return-requests/pending-count')
+}

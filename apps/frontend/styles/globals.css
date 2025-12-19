@@ -25,6 +25,7 @@
   inset: auto -20% 0 -20%;
   height: 120px;
   background: radial-gradient(120% 60% at 50% 0%, rgba(255,255,255,0.18), rgba(255,255,255,0) 60%);
+  pointer-events: none;
 }
 
 .lf-hero-sub { opacity: .95; font-size: 12px; }
@@ -868,8 +869,67 @@ html, body { height: 100%; }
   background:#fef2f2; color:#7f1d1d; border:1px solid #fecaca;
 }
 .lf-alert-btn{
-  height:34px; padding:0 12px; border-radius:10px;
-  background:#fff; border:1px solid #fecaca; color:#991b1b; font-weight:700;
+    height:34px; padding:0 12px; border-radius:10px;
+    background:#fff; border:1px solid #fecaca; color:#991b1b; font-weight:700;
+  }
+
+.lf-alert-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+  flex-wrap: wrap;
+}
+.lf-alert-text {
+  flex: 1;
+  min-width: 0;
+}
+.lf-alert-kicker {
+  font-size: 12px;
+  opacity: 0.75;
+  margin-bottom: 6px;
+}
+.lf-alert-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  word-break: keep-all;
+}
+.lf-alert-desc {
+  font-size: 13px;
+  opacity: 0.8;
+}
+.lf-alert-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.lf-alert-btn {
+  min-width: 120px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: #1e40af;
+  color: #fff;
+  border: 1px solid #1d4ed8;
+  font-weight: 700;
+}
+@media (max-width: 640px) {
+  .lf-alert-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .lf-alert-actions {
+    width: 100%;
+  }
+  .lf-alert-btn {
+    width: 100%;
+    text-align: center;
+  }
 }
 
 /* 빈 상태 */
@@ -1056,3 +1116,5 @@ html, body { height: 100%; }
 .lf-desc-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .lf-desc-list li { font-size: 14px; color: #0f172a; }
 .lf-desc-list strong { color: #475569; margin-right: 6px; }
+
+.lf-activity-chip{display:inline-flex;align-items:center;justify-content:center;min-width:44px;padding:2px 8px;margin-right:8px;border-radius:999px;background:#e0e7ff;color:#312e81;font-size:12px;font-weight:700;}

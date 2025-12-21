@@ -259,7 +259,7 @@ export default function MyItemsPage() {
       {/* 하단 TabBar */}
       <nav className="lf-tabbar" aria-label="하단 탭바">
         <div className="lf-tabbar-inner">
-          <Link href="/" className="lf-tab" aria-label="홈">
+          <Link href="/home" className="lf-tab" aria-label="홈">
             <Home size={18} />
             <span>홈</span>
           </Link>

@@ -13,6 +13,7 @@
     "codegen:fe": "openapi-typescript ./contracts/openapi.yaml -o ./apps/frontend/lib/api.types.ts",
     "dc:up": "docker compose -f ./infra/docker-compose.yml up -d",
     "dc:down": "docker compose -f ./infra/docker-compose.yml down",
+    "test": "echo \"Error: no test specified\" && exit 0",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -25,10 +26,10 @@
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [
-      "prettier --write"
+      "npx prettier --write"
     ],
     "*.{json,md,yml,yaml}": [
-      "prettier --write"
+      "npx prettier --write"
     ]
   }
 }

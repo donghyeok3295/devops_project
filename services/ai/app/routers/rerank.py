@@ -1,68 +1,44 @@
-from fastapi import APIRouter, HTTPException, Header
-from pydantic import BaseModel, Field
-from typing import List, Optional
-import os
-from app.services.pipeline import rerank as run_pipeline
+# services/ai/app/routers/rerank.py
 
-router = APIRouter(prefix="/rerank", tags=["rerank"])
-
-# ✅ 환경 변수에서 관리자 토큰 로드
-ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
+from fastapi import APIRouter
+from app.matching_engine import match_item
 
 
-# ==============================
-# 📦 Request / Response Models
-# ==============================
-class Candidate(BaseModel):
-    item_id: int
-    category: Optional[str] = None
-    brand: Optional[str] = None
-    color: Optional[str] = None
-    lat: Optional[float] = None
-    lng: Optional[float] = None
-    created_at: Optional[str] = None
-    features_text: Optional[str] = None
 
+router = APIRouter(
+    prefix="/rerank",
+    tags=["rerank"]
+)
 
-class RerankRequest(BaseModel):
-    query_text: str = Field(..., min_length=1)
-    candidates: List[Candidate]
+# ------------------------
+# 🔥 인증 제거 버전
+# 기존 dependencies=[...] 모두 삭제
+# ------------------------
 
-
-class RerankResponse(BaseModel):
-    item_id: int
-    rule_score: float
-    llm_score: float
-    reason_text: List[str]
-
-
-# ==============================
-# 🚀 /rerank 엔드포인트
-# ==============================
-@router.post("", response_model=List[RerankResponse])
-async def rerank(
-    req: RerankRequest,
-    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token")
-):
+@router.post("/")
+async def rerank_items(payload: dict):
     """
-    분실물 검색 결과를 규칙 기반 + LLM 기반으로 재순위화합니다.
-    접근 시 'X-Admin-Token' 헤더에 ADMIN_TOKEN(.env)을 포함해야 합니다.
+    Rerank API (Authorization-free)
+    - user_input: 사용자 입력 정보
+    - candidates: DB에서 가져온 후보 아이템들
     """
+    
+    # JSON 파싱
+    try:
+        user_input = payload["user_input"]
+        candidates = payload["candidates"]
+    except Exception:
+        return {"error": "Invalid JSON structure. Require 'user_input' and 'candidates'."}
 
-    # ✅ 1. 토큰 검증
-    if ADMIN_TOKEN and x_admin_token != ADMIN_TOKEN:
-        raise HTTPException(status_code=401, detail="Invalid admin token")
+    results = []
+    for c in candidates:
+        result = match_item(user_input, c)
+        results.append(result)
 
-    # ✅ 2. 입력 검증
-    if not req.query_text.strip():
-        raise HTTPException(status_code=400, detail="Empty query_text")
+    # final_score 기준 내림차순 정렬
+    results = sorted(results, key=lambda x: x["final_score"], reverse=True)
 
-    if req.candidates is None:
-        raise HTTPException(status_code=400, detail="candidates is required")
-
-    if len(req.candidates) == 0:
-        return []
-
-    # ✅ 3. 파이프라인 실행
-    out = await run_pipeline(req.query_text, [c.model_dump() for c in req.candidates])
-    return out
+    return {
+        "count": len(results),
+        "results": results
+    }

@@ -1,4 +1,4 @@
-'use client'
+"use client"
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -299,7 +299,7 @@ export default function ItemNewPage() {
 
       {/* 보관 위치 */}
       <section className="section lf-card p-5">
-        <h2 className="mb-3 font-semibold">보관 위치</h2>
+        <h2 className="mb-3 font-semibold">분실물 습득 위치</h2>
         <div className="location-actions">
           <button type="button" onClick={geolocate} className="location-bar w-full">
             <MapPin className="h-4 w-4" />
@@ -375,7 +375,7 @@ export default function ItemNewPage() {
       {/* 하단 TabBar */}
       <nav className="lf-tabbar" aria-label="하단 탭바">
         <div className="lf-tabbar-inner">
-          <Link href="/" className="lf-tab" aria-label="홈">
+          <Link href="/home" className="lf-tab" aria-label="홈">
             <Home size={18} />
             <span>홈</span>
           </Link>

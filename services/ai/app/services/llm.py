@@ -1,169 +1,197 @@
-from __future__ import annotations
-import json, time, hashlib, logging
-from typing import Any, Dict, List, Tuple
+# services/ai/app/services/llm.py (수정본)
+
+import os
+import json
+import re
 import httpx
+import math
+from typing import Any, Dict
 from app.config import settings
 
-logger = logging.getLogger(__name__)
 
-# 단순 TTL 캐시 (메모리)
-_CACHE: dict[str, tuple[float, Any]] = {}
+def _strip_code_fences(s: str) -> str:
+    s = s.strip()
+    s = re.sub(r"^```(?:json)?\s*", "", s, flags=re.IGNORECASE)
+    s = re.sub(r"\s*```$", "", s)
+    return s.strip()
 
-def _cache_get(k: str):
-    v = _CACHE.get(k)
-    if not v:
-        return None
-    expire, val = v
-    if expire < time.time():
-        _CACHE.pop(k, None)
-        return None
-    return val
 
-def _cache_set(k: str, val: Any, ttl: int = 900):
-    _CACHE[k] = (time.time() + ttl, val)
+def _extract_json(s: str) -> dict:
+    """
+    모델이 출력한 텍스트에서 첫 번째 JSON 객체만 안전하게 추출.
+    """
+    s = _strip_code_fences(s)
 
-def _hash(obj: Any) -> str:
+    start = s.find("{")
+    if start == -1:
+        return {}
+
+    depth = 0
+    for i in range(start, len(s)):
+        if s[i] == "{":
+            depth += 1
+        elif s[i] == "}":
+            depth -= 1
+            if depth == 0:
+                fragment = s[start:i+1]
+                try:
+                    return json.loads(fragment)
+                except:
+                    return {}
+    return {}
+
+
+def _build_messages(user_input: Dict[str, Any], candidate: Dict[str, Any], rule_score: float):
+    """
+    LLM 프롬프트 생성
+    """
+
+    system_msg = """
+당신은 분실물 매칭 시스템의 평가 모델입니다.
+사용자가 찾는 물건과 데이터베이스의 물건이 얼마나 일치하는지 0~1 사이의 점수로 평가하세요.
+
+평가 기준:
+- 이름(name)이 검색어와 유사한가? (+0.4)
+- 브랜드(brand)가 일치하는가? (+0.2)
+- 색상(color)이 일치하는가? (+0.2)
+- 카테고리(category)가 일치하는가? (+0.1)
+- 특징(features_text)이 유사한가? (+0.1)
+
+반드시 JSON 형식으로만 응답하세요.
+""".strip()
+
+    # user_input에서 검색어 추출
+    query = user_input.get("query", "")
+
+    user_msg = f"""
+[검색어]
+{query}
+
+[데이터베이스 물품]
+- 이름: {candidate.get('name', 'N/A')}
+- 브랜드: {candidate.get('brand', 'N/A')}
+- 색상: {candidate.get('color', 'N/A')}
+- 카테고리: {candidate.get('category', 'N/A')}
+- 특징: {candidate.get('features_text', 'N/A')}
+
+[규칙 기반 점수]
+{rule_score:.3f}
+
+위 정보를 바탕으로 이 물품이 검색어와 얼마나 일치하는지 평가하세요.
+
+반드시 다음 JSON 형식으로만 응답하세요:
+{{
+  "llm_score": 0.85,
+  "reason": "브랜드와 색상 일치"
+}}
+
+JSON만 출력하고 다른 설명은 하지 마세요.
+""".strip()
+
+    return [
+        {"role": "system", "content": system_msg},
+        {"role": "user", "content": user_msg},
+    ]
+
+
+def _call_llm(messages):
+    """
+    LM Studio(또는 OpenAI 호환 API) 호출
+    """
+    url = f"{settings.llm_base_url}/chat/completions"
+    headers = {"Content-Type": "application/json"}
+    if settings.llm_api_key:
+        headers["Authorization"] = f"Bearer {settings.llm_api_key}"
+
+    body = {
+        "model": settings.llm_model,
+        "messages": messages,
+        "temperature": settings.llm_temperature,
+        "max_tokens": 256
+    }
+
+    print(f"[LLM] Calling {url} with model={settings.llm_model}")
+
     try:
-        return hashlib.sha256(
-            json.dumps(obj, ensure_ascii=False, sort_keys=True).encode()
-        ).hexdigest()
-    except Exception:
-        # fallback 해시 (절대 충돌 안전하진 않지만 문제 회피용)
-        return str(hash(str(obj)))
-
-
-PROMPT = (
-    "당신은 분실물 매칭 평가자입니다.\n"
-    "사용자 질의와 아이템 속성(카테고리, 브랜드, 색상, 특징, 좌표, 시간)을 비교해 "
-    "유사도를 0~1 사이 실수(score)로 평가하고, 이유(reason)를 1~2문장으로 설명하세요. "
-    "이유에는 실제 단어(예: '빨간색', '나이키', '현장 위치') 중 최소 1개를 포함해야 합니다.\n"
-    "반드시 JSON 객체 하나만 반환하세요. 아래 형식 외 다른 텍스트, 설명, 마크다운, 코드블록을 추가하지 마세요.\n"
-    "응답 형식 예:\n"
-    "{{\"items\": [{{\"item_id\": 123, \"score\": 0.83, \"reason\": \"빨간색 나이키 가방과 거의 일치합니다.\"}}]}}\n\n"
-    "질의: {query}\n"
-    "아이템들(JSON): {items}\n"
-)
-
-
-class LLMClient:
-    async def score(
-        self,
-        query_text: str,
-        items: List[Dict[str, Any]]
-    ) -> Tuple[List[float], List[str], str]:
-        """
-        LLM으로 유사도 점수(score)와 설명(reason)을 요청한다.
-        return (scores[], reasons[], status)
-          status ∈ {"ok", "timeout", "error", "cache"}
-        """
-
-        # 캐시 키 생성
-        key = _hash({"q": query_text, "items": items, "m": settings.llm_model})
-        cached = _cache_get(key)
-        if cached:
-            logger.info(f"[LLMClient] cache hit for query='{query_text[:30]}'")
-            return cached["scores"], cached["reasons"], "cache"
-
-        # LLM에 보낼 메시지
-        payload = {
-            "model": settings.llm_model,
-            "temperature": 0.0,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "당신은 분실물 매칭 평가자입니다. "
-                        "각 후보 아이템에 대해 0~1 유사도 점수와 짧은 이유만 JSON으로 답하세요."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": PROMPT.format(
-                        query=query_text,
-                        items=json.dumps(items, ensure_ascii=False)
-                    )
-                }
-            ],
-        }
-
-        headers = {}
-        if settings.llm_api_key:
-            headers["Authorization"] = f"Bearer {settings.llm_api_key}"
-
-        try:
-            async with httpx.AsyncClient(timeout=float(settings.llm_timeout_seconds)) as client:
-                r = await client.post(
-                    f"{settings.llm_base_url}/chat/completions",
-                    json=payload,
-                    headers=headers,
-                )
-
+        with httpx.Client(timeout=settings.llm_timeout_seconds) as client:
+            r = client.post(url, headers=headers, json=body)
             r.raise_for_status()
             data = r.json()
 
-            # LLM 응답 본문 (우리가 파싱할 실제 JSON 문자열)
-            content = (
-                data
-                .get("choices", [{}])[0]
-                .get("message", {})
-                .get("content", "")
-                .strip()
-            )
-            if not content:
-                logger.warning("[LLMClient] empty content from LLM")
-                return [], [], "error"
+        content = data["choices"][0]["message"]["content"]
 
-            # LLM이 준 content(JSON 문자열)을 dict로 변환
-            try:
-                js = json.loads(content)
-            except json.JSONDecodeError:
-                logger.error(f"[LLMClient] JSON parse error. content={content[:200]}")
-                return [], [], "error"
+        print(f"[LLM RAW] {content}")
 
-            arr = js.get("items", [])
-            score_map: Dict[int, float] = {}
-            reason_map: Dict[int, str] = {}
+        obj = _extract_json(content)
+        
+        print(f"[LLM PARSED] {obj}")
 
-            for x in arr:
-                try:
-                    item_id = int(x["item_id"])
-                    score_val = float(x.get("score", 0.0))
-                    # 점수는 0~1 클램프
-                    if score_val < 0.0:
-                        score_val = 0.0
-                    elif score_val > 1.0:
-                        score_val = 1.0
-                    score_map[item_id] = score_val
+        return obj
+        
+    except httpx.TimeoutException:
+        print("[LLM ERROR] Timeout")
+        return {}
+    except httpx.HTTPStatusError as e:
+        print(f"[LLM ERROR] HTTP {e.response.status_code}: {e.response.text}")
+        return {}
+    except Exception as e:
+        print(f"[LLM ERROR] {type(e).__name__}: {str(e)}")
+        return {}
 
-                    reason_text = str(x.get("reason", "")).strip() or "no-reason"
-                    reason_map[item_id] = reason_text
-                except Exception:
-                    # item_id가 없거나 score가 숫자가 아닐 때 그 항목은 스킵
-                    continue
 
-            # pipeline.rerank()에서 items 순서 기준으로 맞춰줘야 하므로
-            scores: List[float] = [
-                score_map.get(int(it["item_id"]), 0.0)
-                for it in items
-            ]
-            reasons: List[str] = [
-                reason_map.get(int(it["item_id"]), "no-reason")
-                for it in items
-            ]
+def score(user_input: Dict[str, Any], candidate: Dict[str, Any], rule_score: float) -> Dict[str, Any]:
+    """
+    LLM 기반 점수 계산
+    
+    Args:
+        user_input: 사용자 검색 정보 (query 포함)
+        candidate: 개별 아이템 정보
+        rule_score: 규칙 기반 점수 (0~1 또는 0~100)
+    
+    Returns:
+        {
+            "llm_score": float (0~1),
+            "reason": str
+        }
+    """
 
-            _cache_set(key, {"scores": scores, "reasons": reasons})
-            logger.info(f"[LLMClient] success: {len(items)} items scored.")
-            return scores, reasons, "ok"
+    # 규칙 점수 정규화 (0~100 범위를 0~1로 변환)
+    normalized_rule = rule_score / 100.0 if rule_score > 1.0 else rule_score
 
-        except (httpx.TimeoutException, httpx.ReadTimeout):
-            logger.warning("[LLMClient] timeout")
-            return [], [], "timeout"
+    try:
+        msgs = _build_messages(user_input, candidate, normalized_rule)
+        obj = _call_llm(msgs)
 
-        except httpx.RequestError as e:
-            logger.error(f"[LLMClient] HTTP error: {e}")
-            return [], [], "error"
+        # JSON 파싱 실패 → fallback
+        if "llm_score" not in obj:
+            print(f"[LLM] llm_score 키 없음. 파싱된 객체: {obj}")
+            return {
+                "llm_score": 0.0,
+                "reason": "Parsing failed (fallback applied)"
+            }
 
-        except Exception as e:
-            logger.exception(f"[LLMClient] unexpected error: {e}")
-            return [], [], "error"
+        # 점수 정규화
+        try:
+            s = float(obj["llm_score"])
+        except (ValueError, TypeError):
+            print(f"[LLM] llm_score 값 변환 실패: {obj.get('llm_score')}")
+            s = 0.0
+
+        # 0~1 범위로 클램핑
+        s = max(0.0, min(1.0, s))
+
+        reason = obj.get("reason", "no-reason")
+
+        return {
+            "llm_score": s,
+            "reason": reason
+        }
+
+    except Exception as e:
+        print(f"[LLM ERROR] score() 함수 실패: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "llm_score": 0.0,
+            "reason": f"error: {str(e)}"
+        }

@@ -1,28 +1,36 @@
 # services/ai/app/main.py
-from fastapi import FastAPI, HTTPException
 
-app = FastAPI(title='Smart Lost&Found AI', version="1.0.0")
+from dotenv import load_dotenv
+load_dotenv()
 
-from .service import calculate_similarity_scores
-from .schemas import SearchRequest, SearchResponse
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+from app.routers import rerank, health, search
 
-@app.post("/search", response_model=SearchResponse)
-def search(payload: SearchRequest):
-    """
-    LLM 기반 분실물 검색 엔드포인트
-    현재는 규칙 기반, 추후 실제 LLM 통합 예정
-    """
-    try:
-        result = calculate_similarity_scores(payload)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+app = FastAPI(
+    title="AI Matcher Rerank API",
+    version="0.1.0"
+)
 
-@app.post('/rerank')
-def rerank():
-    # TODO: 규칙 점수 기반 후보 N개 + LLM rerank 반환
-    return {'items': []}
+# CORS 설정
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],          # 프론트 어디든 허용
+    allow_credentials=False,      # "*" 사용 위해 False 유지
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# API 라우터 등록
+app.include_router(search.router)
+app.include_router(rerank.router)    # ← 매칭 엔진 호출 API
+app.include_router(health.router)
+
+@app.get("/healthz")
+def healthz():
+    return {
+        "status": "ok",
+        "service": "ai-matcher",
+        "version": "0.1.0"
+    }

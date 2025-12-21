@@ -1,4 +1,4 @@
-'use client';
+﻿"use client";
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -47,7 +47,7 @@ export default function SearchPage() {
             aria-label="AI 검색 실행"
             disabled={!q.trim()}
           >
-            분실물 검색 
+            분실물 검색
           </button>
         </form>
 
@@ -76,7 +76,7 @@ export default function SearchPage() {
       {/* 하단 탭바 */}
       <nav className="lf-tabbar" aria-label="하단 탭바">
         <div className="lf-tabbar-inner">
-          <Link href="/" className="lf-tab" aria-label="홈">
+          <Link href="/home" className="lf-tab" aria-label="홈">
             <Home size={18} />
             <span>홈</span>
           </Link>

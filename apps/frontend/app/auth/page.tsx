@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-// ✅ 바뀐 포인트: 클래스가 아니라 함수로 import
 import { login, register } from "@/lib/api";
 
-// ✅ Role 타입을 로컬로 정의(또는 api.ts에서 export 해도 됨)
 type Role = "SEEKER" | "FINDER";
 
 export default function AuthPage() {
@@ -15,11 +13,9 @@ export default function AuthPage() {
 
   const router = useRouter();
 
-  // 폼 상태
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>("SEEKER");
 
   useEffect(() => {
     setMsg(null);
@@ -30,11 +26,19 @@ export default function AuthPage() {
     setLoading(true);
     setMsg(null);
     try {
-      // ✅ 함수 호출로 변경
       const res = await login(email, password);
       localStorage.setItem("lf_token", res.access_token);
-      setMsg("✅ 로그인 성공! 잠시 후 이동합니다...");
-      setTimeout(() => router.push("/"), 600);
+
+      // redirectTo 쿼리가 있으면 우선 사용, 없으면 /home
+      let target = "/home";
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const redirectTo = params.get("redirectTo");
+        if (redirectTo) target = redirectTo;
+      } catch {}
+
+      setMsg("로그인 성공! 곧 이동합니다...");
+      setTimeout(() => router.replace(target), 300);
     } catch (e: any) {
       setMsg(e?.message || "로그인 실패");
     } finally {
@@ -47,12 +51,11 @@ export default function AuthPage() {
     setLoading(true);
     setMsg(null);
     try {
-      // ✅ 함수 호출로 변경
-      await register({ email, phone, password, role });
-      setMsg("🎉 회원가입 완료! 이제 로그인해주세요.");
+      await register({ email, phone, password, role: "FINDER" as Role });
+      setMsg("회원가입이 완료됐습니다. 로그인해 주세요.");
       setTab("login");
     } catch (e: any) {
-      setMsg(e?.message || "회원가입 실패");
+      setMsg(e?.message || "회원가입에 실패했습니다");
     } finally {
       setLoading(false);
     }
@@ -61,13 +64,12 @@ export default function AuthPage() {
   return (
     <div className="auth-bg">
       <div className="auth-card">
-        {/* 상단 타이틀 & 탭 */}
         <div style={{ display: "grid", gap: 12 }}>
           <h1 className="auth-title">{tab === "login" ? "로그인" : "회원가입"}</h1>
           <p className="auth-sub">
             {tab === "login"
-              ? "계정을 입력하고 로그인하세요"
-              : "간단한 정보로 빠르게 가입할 수 있어요"}
+              ? "계정 정보를 입력하고 로그인하세요"
+              : "간단한 정보를 입력해 계정을 만들 수 있습니다"}
           </p>
 
           <div
@@ -111,7 +113,6 @@ export default function AuthPage() {
           </div>
         </div>
 
-        {/* 폼 */}
         {tab === "login" ? (
           <form onSubmit={onLogin} style={{ display: "grid", gap: 12, marginTop: 8 }}>
             <input
@@ -143,11 +144,11 @@ export default function AuthPage() {
               disabled={loading}
               aria-busy={loading}
             >
-              {loading ? "처리 중..." : "로그인"}
+              {loading ? "처리 중.." : "로그인"}
             </button>
 
             <div className="auth-toggle">
-              계정이 없나요?{" "}
+              계정이 없으신가요?{" "}
               <button type="button" onClick={() => setTab("register")}>
                 회원가입
               </button>
@@ -167,7 +168,7 @@ export default function AuthPage() {
             <input
               type="tel"
               className="auth-input"
-              placeholder="휴대폰 번호 (예: 010-1234-5678)"
+              placeholder="전화번호 (예: 010-1234-5678)"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               required
@@ -183,25 +184,6 @@ export default function AuthPage() {
               autoComplete="new-password"
             />
 
-            <div className="auth-role">
-              <button
-                type="button"
-                onClick={() => setRole("SEEKER")}
-                className={role === "SEEKER" ? "is-active" : undefined}
-                aria-pressed={role === "SEEKER"}
-              >
-                분실자(찾기)
-              </button>
-              <button
-                type="button"
-                onClick={() => setRole("FINDER")}
-                className={role === "FINDER" ? "is-active" : undefined}
-                aria-pressed={role === "FINDER"}
-              >
-                습득자(등록)
-              </button>
-            </div>
-
             {msg && (
               <p style={{ textAlign: "center", fontSize: 12, color: "#475569" }}>{msg}</p>
             )}
@@ -212,11 +194,11 @@ export default function AuthPage() {
               disabled={loading}
               aria-busy={loading}
             >
-              {loading ? "처리 중..." : "회원가입"}
+              {loading ? "처리 중.." : "회원가입"}
             </button>
 
             <div className="auth-toggle">
-              이미 계정이 있나요?{" "}
+              이미 계정이 있으신가요?{" "}
               <button type="button" onClick={() => setTab("login")}>
                 로그인
               </button>

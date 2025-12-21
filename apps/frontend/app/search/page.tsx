@@ -1,9 +1,9 @@
-'use client';
+﻿"use client";
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Search, Upload, ClipboardList, User } from 'lucide-react';
+import { Search as SearchIcon, Home, PlusCircle, Bell, User } from 'lucide-react';
 
 export default function SearchPage() {
   const [q, setQ] = useState('');
@@ -18,23 +18,20 @@ export default function SearchPage() {
 
   return (
     <div className="lf-page lf-search">
-      {/* TopNav (심플 버전) */}
-      <header className="lf-search-topnav">
-        <Link href="/" className="lf-logo">Smart Lost&Found</Link>
-        <Link href="/auth" className="lf-login">로그인</Link>
-      </header>
-
-      {/* 헤더 타이틀 */}
-      <section className="lf-search-hero">
-        <h1 className="title">분실물 검색</h1>
-        <p className="desc">잃어버린 물건을 자세히 설명해 주세요</p>
+      {/* Hero */}
+      <section className="lf-hero">
+        <div className="lf-container">
+          <p className="lf-hero-sub">검색</p>
+          <h1 className="lf-hero-title">분실물 검색</h1>
+          <p className="lf-hero-desc">잃어버린 물건을 자세히 설명해 주세요</p>
+        </div>
       </section>
 
       {/* 검색 입력 + 버튼 */}
-      <div className="lf-container">
+      <div className="lf-container" style={{ marginTop: '-30px', paddingTop: '24px' }}>
         <form onSubmit={onSubmit} className="lf-search-box" role="search" aria-label="분실물 자연어 검색">
           <div className="input-wrap">
-            <Search aria-hidden className="icon" />
+            <SearchIcon aria-hidden className="icon" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -50,14 +47,14 @@ export default function SearchPage() {
             aria-label="AI 검색 실행"
             disabled={!q.trim()}
           >
-            분실물 검색 
+            분실물 검색
           </button>
         </form>
 
         {/* 초기 빈 상태 일러스트/카피 */}
         <div className="lf-search-empty" aria-hidden>
           <div className="glass">
-            <Search size={48} />
+            <SearchIcon size={48} />
           </div>
           <div className="text">
             <h3>분실물을 찾아보세요</h3>
@@ -76,28 +73,28 @@ export default function SearchPage() {
         </section>
       </div>
 
-      {/* 하단 탭바 (UI만) */}
-      <nav className="lf-tabbar">
+      {/* 하단 탭바 */}
+      <nav className="lf-tabbar" aria-label="하단 탭바">
         <div className="lf-tabbar-inner">
-          <Link href="/" className="lf-tab">
-            <Search className="w-5 h-5" />
-            <span className="text-[11px]">홈</span>
+          <Link href="/home" className="lf-tab" aria-label="홈">
+            <Home size={18} />
+            <span>홈</span>
           </Link>
-          <Link href="/items/new" className="lf-tab">
-            <Upload className="w-5 h-5" />
-            <span className="text-[11px]">등록</span>
+          <Link href="/items/new" className="lf-tab" aria-label="등록">
+            <PlusCircle size={18} />
+            <span>등록</span>
           </Link>
-          <Link href="/me/activity" className="lf-tab">
-            <ClipboardList className="w-5 h-5" />
-            <span className="text-[11px]">내 활동</span>
+          <Link href="/me/activity" className="lf-tab" aria-label="내 활동">
+            <Bell size={18} />
+            <span>내 활동</span>
           </Link>
-          <Link href="/me/profile" className="lf-tab">
-            <User className="w-5 h-5" />
-            <span className="text-[11px]">내 정보</span>
+          <Link href="/me/profile" className="lf-tab" aria-label="내 정보">
+            <User size={18} />
+            <span>내 정보</span>
           </Link>
-          <Link href="/search" className="lf-tab lf-tab-active">
-            <Search className="w-5 h-5" />
-            <span className="text-[11px]">검색</span>
+          <Link href="/search" className="lf-tab lf-tab-active" aria-label="검색">
+            <SearchIcon size={18} />
+            <span>검색</span>
           </Link>
         </div>
       </nav>

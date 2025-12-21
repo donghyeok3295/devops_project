@@ -1,101 +1,125 @@
-'use client'
+﻿"use client"
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { LogOut, Bell, MapPin, ShieldCheck, BadgeCheck, User, Settings, Sparkles, Star } from 'lucide-react'
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { LogOut, BadgeCheck, User, Settings, Sparkles, Star, Home, PlusCircle, Search, Bell, ShieldCheck, Lock } from "lucide-react";
+import { getMyProfile, getMyStats } from "@/lib/api";
 
 type Profile = {
-  name: string
-  role: 'SEEKER' | 'FINDER'
-  joined_at: string
-  reputation: number // 0~5
+  name: string;
+  joined_at: string;
+  reputation: number;
   stats: {
-    registered: number
-    matched: number
-    claims: number
-    handed_over: number
-  }
-  badges: Array<{ id: string; label: string; desc: string }>
-}
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000'
+    registered: number;
+    stored?: number;
+    handed_over: number;
+    claims?: number;
+    matched?: number;
+  };
+  badges: Array<{ id: string; label: string; desc: string }>;
+};
 
 export default function MeProfilePage() {
-  const router = useRouter()
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
 
-  // 토글(로컬 UI 상태만)
-  const [notifOn, setNotifOn] = useState(true)
-  const [locOn, setLocOn] = useState(false)
-
-  const [profile, setProfile] = useState<Profile | null>(null)
-
-  // 임시: 토큰 확인(없으면 로그인 유도)
   function getToken() {
-    if (typeof window === 'undefined') return null
-    return localStorage.getItem('lf_token') || sessionStorage.getItem('lf_token')
+    if (typeof window === "undefined") return null;
+    return localStorage.getItem("lf_token") || sessionStorage.getItem("lf_token");
   }
 
-  // ✅ 나중에 실제 API 연결 시 여기만 바꾸면 됨
   async function fetchProfile(): Promise<Profile> {
-    // const token = getToken()
-    // const res = await fetch(`${API_BASE}/me/profile`, {
-    //   headers: token ? { Authorization: `Bearer ${token}` } : {},
-    //   credentials: 'include',
-    // })
-    // if (!res.ok) throw new Error('프로필을 불러오지 못했습니다.')
-    // return await res.json()
+    const [profileData, statsData] = await Promise.all([
+      getMyProfile(),
+      getMyStats(),
+    ]);
 
-    // ---- UI 데모용 Mock ----
-    await new Promise(r => setTimeout(r, 450))
-    return {
-      name: '동혁',
-      role: 'FINDER',
-      joined_at: '2025-09-05',
-      reputation: 4,
-      stats: { registered: 18, matched: 7, claims: 5, handed_over: 6 },
-      badges: [
-        { id: 'first', label: '첫 등록', desc: '첫 분실물 등록 완료' },
-        { id: 'matcher', label: '매칭 마스터', desc: '5회 이상 매칭 성공' },
-        { id: 'guardian', label: '신뢰의 수호자', desc: '반환 5회 달성' },
-      ],
+    let joinedDate = "N/A";
+    if (profileData.created_at) {
+      try {
+        const date = new Date(profileData.created_at);
+        joinedDate = date.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
+      } catch {}
     }
+
+    return {
+      name: profileData.email?.split("@")[0] ?? "사용자",
+      joined_at: joinedDate,
+      reputation: 4,
+      stats: {
+        registered: statsData.total || 0,
+        stored: statsData.stored ?? 0,
+        handed_over: statsData.handed_over || 0,
+        matched: statsData.handed_over || 0,
+        claims: statsData.claims ?? 0,
+      },
+      badges: [],
+    };
   }
 
   useEffect(() => {
-    const token = getToken()
+    const token = getToken();
     if (!token) {
-      // 로그인 필요 – UI만이므로 바로 이동
-      router.push('/auth')
-      return
+      router.push("/auth");
+      return;
     }
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     fetchProfile()
       .then(setProfile)
-      .catch((e) => setError(e.message || '불러오기 실패'))
-      .finally(() => setLoading(false))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+      .catch((e) => setError(e?.message || "Failed to load profile"))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const roleLabel = useMemo(() => (profile?.role === 'FINDER' ? '습득자' : '분실자'), [profile?.role])
+  const matchSuccessCount = profile?.stats?.handed_over ?? profile?.stats?.matched ?? 0;
 
-  const onToggleRole = () => {
-    // UI 데모용: 토글만 바꿔줌 (실제에선 PATCH /me/role)
-    if (!profile) return
-    const next = profile.role === 'FINDER' ? 'SEEKER' : 'FINDER'
-    setProfile({ ...profile, role: next })
-  }
+  const achievements = useMemo(() => {
+    const defs = [
+      { threshold: 3, title: "첫 도움의 손길", lines: ["처음으로 분실물을 찾아주었어요", "누군가의 하루를 도왔습니다"], tone: "tier1" },
+      { threshold: 5, title: "믿음직한 발견자", lines: ["다섯 번의 성공, 신뢰가 쌓이고 있어요", "분실물 찾기의 감을 잡았어요"], tone: "tier2" },
+      { threshold: 7, title: "분실물 전문가", lines: ["이제는 노하우가 보입니다", "많은 사람들에게 도움을 주고 있어요"], tone: "tier3" },
+      { threshold: 10, title: "분실물 해결사", lines: ["열 번의 성공, 신뢰의 상징이 되었습니다", "당신 덕분에 많은 분실물이 돌아갔어요"], tone: "tier4" },
+    ];
+    return defs.map((def) => ({
+      ...def,
+      unlocked: matchSuccessCount >= def.threshold,
+      needed: Math.max(def.threshold - matchSuccessCount, 0),
+    }));
+  }, [matchSuccessCount]);
+
+  const currentTier = useMemo(() => {
+    const tiers = [
+      { threshold: 10, title: "분실물 해결사", lines: ["열 번의 성공, 신뢰의 상징이 되었습니다", "당신 덕분에 많은 분실물이 제자리로 돌아갔어요"], stars: 5 },
+      { threshold: 7, title: "분실물 전문가", lines: ["이제는 노하우가 보입니다", "많은 사람들에게 도움을 주고 있어요"], stars: 3 },
+      { threshold: 5, title: "믿음직한 발견자", lines: ["다섯 번의 성공, 신뢰가 쌓이고 있어요", "분실물 찾기의 감을 잡았어요"], stars: 2 },
+      { threshold: 3, title: "첫 도움의 손길", lines: ["처음으로 분실물을 찾아주었어요", "누군가의 하루를 도왔습니다"], stars: 1 },
+      { threshold: 0, title: "시작하는 발견자", lines: ["첫 매칭을 향해 달려가는 중이에요", ""], stars: 0 },
+    ];
+    return tiers.find((t) => matchSuccessCount >= t.threshold) ?? tiers[tiers.length - 1];
+  }, [matchSuccessCount]);
 
   const onLogout = () => {
-    try { localStorage.removeItem('lf_token'); sessionStorage.removeItem('lf_token') } catch {}
-    router.replace('/auth')
-  }
+    try {
+      localStorage.removeItem("lf_token");
+      sessionStorage.removeItem("lf_token");
+    } catch {}
+    router.replace("/auth");
+  };
 
   return (
     <main className="lf-page lf-profile" aria-live="polite">
-      <div className="lf-container">
+      <section className="lf-hero">
+        <div className="lf-container">
+          <p className="lf-hero-sub">내 정보</p>
+          <h1 className="lf-hero-title">내 정보</h1>
+          <p className="lf-hero-desc">프로필과 통계를 확인하세요.</p>
+        </div>
+      </section>
+
+      <div className="lf-container" style={{ marginTop: "20px" }}>
         <header className="lf-profile-header lf-card" role="banner" aria-label="프로필 헤더">
           <div className="lf-profile-avatar" aria-hidden="true">
             <User size={28} />
@@ -109,29 +133,33 @@ export default function MeProfilePage() {
             ) : error ? (
               <>
                 <h1 className="lf-profile-name">불러오기 실패</h1>
-                <p className="lf-profile-sub">다시 시도해주세요.</p>
+                <p className="lf-profile-sub">다시 시도해 주세요.</p>
               </>
             ) : (
               <>
                 <h1 className="lf-profile-name">{profile?.name}님</h1>
-                <p className="lf-profile-sub">
-                  역할 <span className="lf-role-chip">{roleLabel}</span> · 가입일 {profile?.joined_at}
-                </p>
-                <p className="lf-profile-rep" aria-label={`신뢰도 별점 ${profile?.reputation}점`}>
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star key={i} size={16} className={i < (profile?.reputation ?? 0) ? 'is-on' : ''} />
-                  ))}
-                  <span className="sr-only">신뢰도</span>
-                </p>
+                <p className="lf-profile-sub">가입일 {profile?.joined_at}</p>
+                <div className="lf-profile-tier">
+                  <div className="lf-profile-tier-name">{currentTier.title}</div>
+                  <p className="lf-profile-rep" aria-label={`현재 등급: ${currentTier.title}, 별 ${currentTier.stars}/5`}>
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Star key={i} size={16} className={i < currentTier.stars ? "is-on" : ""} />
+                    ))}
+                    <span className="sr-only">등급</span>
+                  </p>
+                  <p className="lf-profile-sub" style={{ color: "#64748b" }}>
+                    {currentTier.lines.filter(Boolean).join(" · ")}
+                  </p>
+                </div>
               </>
             )}
           </div>
         </header>
 
-        {/* 통계 4칸 */}
+        {/* 통계 3칸: 등록 / 보관중 / 매칭성공(=반환 완료) */}
         <section className="lf-profile-stats">
-          <div className="lf-grid-4">
-            {['등록', '성공 매칭', '클레임 접수', '반환 완료'].map((label, idx) => (
+          <div className="lf-grid-3">
+            {["등록", "보관중", "매칭성공"].map((label, idx) => (
               <article key={label} className="lf-stat" aria-label={`통계 ${label}`}>
                 {loading ? (
                   <>
@@ -142,9 +170,8 @@ export default function MeProfilePage() {
                   <>
                     <div className="lf-stat-value">
                       {idx === 0 && profile?.stats.registered}
-                      {idx === 1 && profile?.stats.matched}
-                      {idx === 2 && profile?.stats.claims}
-                      {idx === 3 && profile?.stats.handed_over}
+                      {idx === 1 && (profile?.stats.stored ?? 0)}
+                      {idx === 2 && profile?.stats.handed_over}
                     </div>
                     <div className="lf-stat-label">{label}</div>
                   </>
@@ -154,42 +181,7 @@ export default function MeProfilePage() {
           </div>
         </section>
 
-       
-
-        {/* 설정(알림/위치 토글) */}
-        <section className="lf-card lf-profile-settings section" aria-label="설정">
-          <div className="lf-section-title">설정</div>
-          <ul className="lf-setting-list">
-            <li className="lf-setting-row">
-              <div className="lf-setting-left">
-                <Bell size={18} /> 알림
-              </div>
-              <button
-                className={`lf-toggle ${notifOn ? 'is-on' : ''}`}
-                onClick={() => setNotifOn(v => !v)}
-                aria-pressed={notifOn}
-                aria-label="알림 토글"
-              >
-                <span className="knob" />
-              </button>
-            </li>
-            <li className="lf-setting-row">
-              <div className="lf-setting-left">
-                <MapPin size={18} /> 위치 서비스
-              </div>
-              <button
-                className={`lf-toggle ${locOn ? 'is-on' : ''}`}
-                onClick={() => setLocOn(v => !v)}
-                aria-pressed={locOn}
-                aria-label="위치 서비스 토글"
-              >
-                <span className="knob" />
-              </button>
-            </li>
-          </ul>
-        </section>
-
-        {/* 개인정보 보호/도움말 */}
+        {/* 안내 */}
         <section className="lf-card lf-profile-info section" aria-label="안내">
           <div className="lf-section-title">안내</div>
           <div className="lf-info-grid">
@@ -197,53 +189,100 @@ export default function MeProfilePage() {
               <Settings size={18} />
               <div>
                 <div className="tit">개인정보/보안</div>
-                <p className="txt">개인정보는 암호화되어 저장되고, 위치는 반올림 좌표로 표시됩니다.</p>
+                <p className="txt">개인정보는 안전하게 보호되며 위치는 반환 완료 시에만 표시됩니다.</p>
               </div>
             </div>
             <div className="lf-info-item">
               <BadgeCheck size={18} />
               <div>
-                <div className="tit">도움말 & 앱 정보</div>
-                <p className="txt">FAQ와 업데이트 내역은 설정 페이지에서 확인할 수 있어요.</p>
+                <div className="tit">설정 & 고객지원</div>
+                <p className="txt">FAQ와 업데이트는 설정 페이지에서 확인하세요.</p>
               </div>
             </div>
           </div>
         </section>
 
-        {/* 업적(뱃지) */}
+        {/* 업적 */}
         <section className="lf-card lf-profile-badges section" aria-label="업적">
           <div className="lf-section-title">업적</div>
           {loading ? (
             <div className="lf-badges">
-              {Array.from({ length: 3 }).map((_, i) => (
+              {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="lf-badge-card skel" />
               ))}
             </div>
-          ) : (profile?.badges?.length ?? 0) === 0 ? (
-            <p className="lf-empty">아직 업적이 없습니다.</p>
           ) : (
             <div className="lf-badges">
-              {profile!.badges.map(b => (
-                <article key={b.id} className="lf-badge-card" aria-label={b.label}>
-                  <div className="ico"><Sparkles size={18} /></div>
-                  <div className="name">{b.label}</div>
-                  <div className="desc">{b.desc}</div>
+              {achievements.map((a) => (
+                <article
+                  key={a.threshold}
+                  className={`lf-badge-card ${a.unlocked ? "is-on" : "is-off"} ${a.tone}`}
+                  aria-label={a.title}
+                >
+                  <div className="ico">
+                    {a.threshold >= 10 ? <ShieldCheck size={18} /> : <Search size={18} />}
+                  </div>
+                  <div className="name">{a.title}</div>
+                  <div className="desc">{a.lines[0]}</div>
+                  <div className="desc" style={{ color: "#94a3b8" }}>{a.lines[1]}</div>
+                  <div className="lf-badge-stars" aria-hidden="true">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <Star
+                        key={i}
+                        size={14}
+                        className={i < (a.unlocked ? (a.threshold >= 10 ? 4 : a.threshold >= 7 ? 3 : a.threshold >= 5 ? 2 : 1) : 0) ? "is-on" : ""}
+                      />
+                    ))}
+                  </div>
+                  <div className="lf-badge-progress">
+                    {a.unlocked ? "획득 완료" : `남은 횟수: ${a.needed} (성공 ${matchSuccessCount}회)`}
+                  </div>
+                  {!a.unlocked && (
+                    <div className="lf-badge-lock" aria-hidden="true">
+                      <Lock size={14} />
+                    </div>
+                  )}
                 </article>
               ))}
             </div>
           )}
         </section>
 
-        {/* 하단 로그아웃 */}
+        {/* 로그아웃 */}
         <section className="lf-profile-logout section" aria-label="로그아웃">
           <button className="lf-btn-danger" onClick={onLogout} aria-label="로그아웃">
             <LogOut size={18} /> 로그아웃
           </button>
         </section>
 
-        {/* 여백(고정 탭바와 간섭 방지) */}
         <div style={{ height: 76 }} aria-hidden="true" />
       </div>
+
+      {/* TabBar */}
+      <footer className="lf-tabbar" role="navigation" aria-label="하단 내비게이션">
+        <div className="lf-tabbar-inner">
+          <Link href="/home" className="lf-tab" aria-label="홈">
+            <Home size={18} />
+            <span>홈</span>
+          </Link>
+          <Link href="/items/new" className="lf-tab" aria-label="등록">
+            <PlusCircle size={18} />
+            <span>등록</span>
+          </Link>
+          <Link href="/me/activity" className="lf-tab" aria-label="내 활동">
+            <Bell size={18} />
+            <span>내 활동</span>
+          </Link>
+          <Link href="/me/profile" className="lf-tab lf-tab-active" aria-current="page" aria-label="내 정보">
+            <User size={18} />
+            <span>내 정보</span>
+          </Link>
+          <Link href="/search" className="lf-tab" aria-label="검색">
+            <Search size={18} />
+            <span>검색</span>
+          </Link>
+        </div>
+      </footer>
     </main>
-  )
+  );
 }

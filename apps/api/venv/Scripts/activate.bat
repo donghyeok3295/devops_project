@@ -8,7 +8,7 @@ if defined _OLD_CODEPAGE (
     "%SystemRoot%\System32\chcp.com" 65001 > nul
 )
 
-set "VIRTUAL_ENV=C:\Users\DongHyeok\Desktop\즐거운 대학생활\대학교 2학년\2학년 2학기\deveops\smart-lostfound 2\apps\api\venv"
+set "VIRTUAL_ENV=C:\Users\DongHyeok\Desktop\즐거운 대학생활\대학교 2학년\2학년 2학기\deveops\smart_lostfound(1212)\apps\api\venv"
 
 if not defined PROMPT set PROMPT=$P$G
 

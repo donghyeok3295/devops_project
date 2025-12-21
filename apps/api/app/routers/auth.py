@@ -1,5 +1,6 @@
 # apps/api/app/routers/auth.py
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from ..db import get_db
@@ -46,7 +47,7 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
     email = payload.email.lower()
     user = db.query(User).filter(User.email == email).first()
     if not user or user.password_hash != _hash_pw(email, payload.password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        return JSONResponse(status_code=401, content={"message": "로그인 정보가 틀립니다."})
     token = create_access_token(sub=str(user.id))
     return {"access_token": token, "token_type": "bearer", "user": {"id": user.id, "role": user.role}}
 

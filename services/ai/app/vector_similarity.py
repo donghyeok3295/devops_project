@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer, util
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 def normalize_distance(dist, max_dist=50):
-    """0~max_dist 범위를 0~1 유사도로 변환"""
+    """0~max_dist 범위를 0~1 점수로 변환"""
     dist = min(dist, max_dist)
     return 1 - (dist / max_dist)
 
